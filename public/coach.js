@@ -1,3 +1,4 @@
+import {childGrammar} from './child-plans.js';
 import {dateKey,topics} from './learning.js';
 export const diagnostic=[
 {question:'She ___ English every day.',options:['study','studies','studying'],correct:1,why:'Use “studies” with he, she or it in the present simple.'},
@@ -23,7 +24,7 @@ export const grammar=[
 ['I have ___ this before.',['try','trying','tried'],2,'Use a past participle after “have”: have tried.'],
 ['I want ___ more next week.',['learn','to learn','learning'],1,'Use “to” and a base verb after “want”.']
 ];
-export function grammarFor(index){const[q,options,correct,why]=grammar[index%grammar.length];return{question:q,options,correct,why}}
+export function grammarFor(index,goal){const child=childGrammar(goal,index);if(child)return child;const[q,options,correct,why]=grammar[index%grammar.length];return{question:q,options,correct,why}}
 export function recommendation(score){return score>=4?'intermediate':'beginner'}
 export function writingHints(text,target){const clean=text.trim();const words=clean.match(/[A-Za-z]+(?:['’][A-Za-z]+)*/g)||[];return{count:words.length,checks:[{label:'Start with a capital letter',ok:/^[A-Z]/.test(clean)},{label:'Finish with sentence punctuation',ok:/[.!?]["'”’]?$/.test(clean)},{label:`Try the word “${target}”`,ok:words.some(w=>w.toLowerCase()===target.toLowerCase())},{label:'Write at least two sentences',ok:(clean.match(/[.!?]+(?:\s|$)/g)||[]).length>=2}]}}
 export function streak(completed,now=new Date()){const days=new Set(completed);const d=new Date(now);if(!days.has(dateKey(d)))d.setDate(d.getDate()-1);let count=0;while(days.has(dateKey(d))){count++;d.setDate(d.getDate()-1)}return count}
@@ -31,7 +32,7 @@ export function reviewDays(word,rating){if(rating==='again')return 0;if(rating==
 const validDate=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s));
 export function normalizeState(v){
 if(!v||typeof v!=='object'||!Array.isArray(v.completed)||!v.completed.every(validDate)||!Array.isArray(v.words))throw Error('Invalid backup');
-if(v.profile&&(!Object.hasOwn(topics,v.profile.goal)||!['beginner','intermediate'].includes(v.profile.level)||!['10','20','30'].includes(String(v.profile.minutes))||typeof v.profile.name!=='string'))throw Error('Invalid profile');
+if(v.profile&&(!Object.hasOwn(topics,v.profile.goal)||!['beginner','intermediate'].includes(v.profile.level)||!['5','10','15','20','30'].includes(String(v.profile.minutes))||typeof v.profile.name!=='string'))throw Error('Invalid profile');
 if(!v.words.every(w=>w&&typeof w.word==='string'&&typeof w.meaning==='string'&&typeof w.example==='string'&&validDate(w.due)))throw Error('Invalid words');
 if(v.drafts&& (typeof v.drafts!=='object'||Array.isArray(v.drafts)||!Object.values(v.drafts).every(t=>typeof t==='string')))throw Error('Invalid writing');
 const records=Array.isArray(v.records)?v.records.filter(r=>r&&validDate(r.date)&&Number.isInteger(r.index)&&r.index>=0&&r.index<14&&Object.hasOwn(topics,r.goal)&&Number.isFinite(r.seconds)&&r.seconds>=0):[];
