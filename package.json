@@ -1,1 +1,16 @@
-{"name":"english-trainer","version":"0.1.0","private":true,"type":"module","scripts":{"test":"node --test","check":"node --check public/app.js && node --check public/learning.js","dev":"npx wrangler dev","deploy":"npx wrangler deploy"},"devDependencies":{"wrangler":"^4.0.0"}}
+{
+  "name": "english-trainer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check public/app.js && node --check public/learning.js",
+    "deploy": "npx wrangler deploy",
+    "build": "npm run check && npm test && node scripts/build.mjs",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

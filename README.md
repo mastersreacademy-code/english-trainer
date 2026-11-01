@@ -19,10 +19,10 @@ npm test
 npm run dev
 ```
 
-Cloudflare dashboard → Workers & Pages → Create → Import repository → select this GitHub repository. Use no build command, and deploy command `npx wrangler deploy`. Root directory: repository root. The `public` directory is explicitly declared in `wrangler.jsonc`. Connect `main` for production; use feature branches for previews.
+Cloudflare dashboard → Workers & Pages → Create → Import repository → select this GitHub repository. Use build command `npm run build`, and deploy command `npx wrangler deploy`. Root directory: repository root. The `public` directory is explicitly declared in `wrangler.jsonc`. Connect `main` for production; use feature branches for previews.
 
 ## Scope and privacy
-Progress is saved in localStorage in the current browser, with a downloadable backup. There is no server account, cross-device synchronization, AI correction, microphone recording, or pronunciation scoring yet. Browser speech availability depends on device voices. Daily time is a practice target, not a enforced timer. Starter listening uses one common routine script across topics; speaking/writing prompts follow the selected topic. No paid API or credentials are needed.
+Progress is saved in localStorage in the current browser, with a downloadable backup. There is no server account, cross-device synchronization, AI correction, microphone recording, or pronunciation scoring yet. Browser speech availability depends on device voices. Daily time is a practice target, not a enforced timer. All 21 starter topics have distinct listening scripts and comprehension questions. No paid API or credentials are needed.
 
 Noindex is not access control. Before storing private information on a hosted version, protect the Cloudflare hostname with Cloudflare Access. The repository itself may be public; do not commit secrets or personal records.
 
