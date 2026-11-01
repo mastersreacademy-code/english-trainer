@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {normalizeState,emptyState,streak,writingHints,reviewDays,recommendation,grammarFor} from '../public/coach.js';
+import {lesson} from '../public/learning.js';
+const old={profile:{name:'Learner',goal:'work',minutes:'20',level:'beginner'},completed:['2026-10-31'],words:[{word:'hello',meaning:'xin chào',example:'Hello!',due:'2026-11-01'}],drafts:{'2026-10-31':'I study English.'}};
+test('v1 migration preserves writing, words and completion dates without inventing scores',()=>{const s=normalizeState(old);assert.deepEqual(s.completed,old.completed);assert.deepEqual(s.drafts,old.drafts);assert.equal(s.words[0].word,'hello');assert.equal(s.records.length,0);assert.equal(s.version,2)});
+test('invalid imports cannot inject unsupported profiles or malformed collections',()=>{assert.throws(()=>normalizeState({...old,profile:{...old.profile,goal:'constructor'}}));assert.throws(()=>normalizeState({...old,words:[{}]}));assert.throws(()=>normalizeState({...old,drafts:{today:{}}}));assert.throws(()=>normalizeState({...old,completed:['yesterday']}));});
+test('streak counts consecutive local dates and allows today to remain unfinished',()=>{assert.equal(streak(['2026-10-30','2026-10-31'],new Date(2026,10,1)),2);assert.equal(streak(['2026-10-30'],new Date(2026,10,1)),0);assert.equal(streak(['2026-10-31','2026-11-01'],new Date(2026,10,1)),2)});
+test('writing hints recognise words rather than substrings',()=>{const h=writingHints('I am confident. I practise daily.','confident');assert.equal(h.count,6);assert.ok(h.checks.every(c=>c.ok));assert.equal(writingHints('I am confidently speaking.','confident').checks[2].ok,false)});
+test('reviews grow only on easy ratings and remain bounded',()=>{assert.equal(reviewDays({interval:3},'easy'),8);assert.equal(reviewDays({interval:30},'easy'),30);assert.equal(reviewDays({interval:30},'hard'),1);assert.equal(reviewDays({},'again'),0)});
+test('week two has new titles and vocabulary; later cycles wrap correctly',()=>{const p=old.profile;assert.equal(lesson(p,Array(7).fill('x')).title,'Writing a clear email');assert.equal(lesson(p,Array(7).fill('x')).word[0],'opinion');assert.equal(lesson(p,Array(14).fill('x')).index,0)});
+test('diagnostic difficulty threshold is explicit; grammar has 14 valid exercises',()=>{assert.equal(recommendation(3),'beginner');assert.equal(recommendation(4),'intermediate');for(let i=0;i<14;i++){const g=grammarFor(i);assert.ok(g.options[g.correct]);assert.ok(g.why)}});
+test('duplicate completion dates are migrated only once and empty state is valid',()=>{assert.equal(normalizeState({...old,completed:['2026-10-31','2026-10-31']}).completed.length,1);assert.equal(emptyState().profile,null)});
