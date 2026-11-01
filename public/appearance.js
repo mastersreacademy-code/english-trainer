@@ -1,0 +1,9 @@
+export const appearanceKey='english-trainer-appearance';
+export function normalizeAppearance(value){return{mode:['light','dark','system'].includes(value?.mode)?value.mode:'system',accent:['forest','ocean','dusk'].includes(value?.accent)?value.accent:'forest'}}
+export function resolveMode(mode,systemDark){return mode==='system'?(systemDark?'dark':'light'):mode}
+export function readAppearance(){try{return normalizeAppearance(JSON.parse(localStorage.getItem(appearanceKey)))}catch{return normalizeAppearance(null)}}
+export function initAppearance(){let preferences=readAppearance();const media=matchMedia('(prefers-color-scheme: dark)'),dialog=document.querySelector('#appearance-dialog');
+function apply(){document.documentElement.dataset.mode=resolveMode(preferences.mode,media.matches);document.documentElement.dataset.accent=preferences.accent;document.querySelectorAll('[data-mode-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.modeChoice===preferences.mode)));document.querySelectorAll('[data-accent-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.accentChoice===preferences.accent)));}
+function save(){try{localStorage.setItem(appearanceKey,JSON.stringify(preferences))}catch{}apply()}
+document.addEventListener('click',e=>{if(e.target.closest('#appearance-open')){apply();dialog.showModal()}if(e.target.closest('#appearance-close'))dialog.close();const mode=e.target.closest('[data-mode-choice]'),accent=e.target.closest('[data-accent-choice]');if(mode){preferences.mode=mode.dataset.modeChoice;save()}if(accent){preferences.accent=accent.dataset.accentChoice;save()}});
+dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});media.addEventListener('change',apply);apply();}
