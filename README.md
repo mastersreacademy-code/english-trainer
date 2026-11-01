@@ -1,6 +1,27 @@
-# English Trainer · Version 3
+# English Trainer · Version 4
 
 Personal English practice app for Cloudflare Workers static assets. No paid API is required. The production deployment is the GitHub-connected `english-trainer` Worker.
+
+## Version 4 family plans
+
+A shared-device learner switcher selects Me, Wife, Ha Nhu (Class 5) or Ha My (Class 1). No separate accounts or sign-in are introduced.
+
+| Learner | Starting plan | Daily target |
+| --- | --- | --- |
+| Me | Existing adult goal and progress are preserved; new browsers start with conversation | 20 minutes for new profiles |
+| Wife | Independent adult conversation plan; goal and difficulty can be changed | 20 minutes |
+| Ha Nhu (Class 5) | 14 school-life lessons, listening, grammar, speaking and three-sentence writing | 15 minutes |
+| Ha My (Class 1) | 14 first-word lessons, short listening games, word play, saying and copying | 10 minutes |
+
+Each learner has independent completion dates, vocabulary, writing, assessment, playback speed and session position. Switching stops playback/recording and remembers the current lesson under that learner. Appearance remains shared on the browser.
+
+The family data is stored at `english-trainer-family-v4`. On first use, the old `english-trainer-v1` record is copied into Me without overwriting the original. Other learners start empty. Later versions use the family record as the authoritative data. An unfinished legacy session can resume only under Me.
+
+Preferences can export all four profiles together or the selected learner. Validated family restores list all four profiles before replacement; older/single-learner backups restore only into the selected compatible plan after confirmation. This is data separation for convenience, not an access/privacy boundary between family members. It does not synchronize across browsers or devices.
+
+Children’s plans are general English practice, not a specific school textbook or CEFR placement. Class 1 permits copying one word and uses a 15-second speaking option. Adult diagnostic questions are not shown to children.
+
+V4 verification: 22 automated tests cover migration, per-learner isolation, family backup round trips, invalid/wrong-plan restores, independent session keys and all 70 listening exercises. Browser QA checked switching between Me and Wife, resuming Me’s saved listening step, completing Ha My’s five-step lesson with one copied word, isolated completion counts, Ha Nhu’s remembered selection, and phone/tablet layout widths.
 
 ## Version 3 visual experience
 
