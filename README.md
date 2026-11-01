@@ -1,6 +1,15 @@
-# English Trainer · Version 2
+# English Trainer · Version 3
 
 Personal English practice app for Cloudflare Workers static assets. No paid API is required. The production deployment is the GitHub-connected `english-trainer` Worker.
+
+## Version 3 visual experience
+
+- Original editorial illustrations for conversation, work and travel, shared as a locally hosted 291 KB WebP atlas.
+- New illustrated dashboard, seven-day practice rhythm, learning-path thumbnails, page banners and five-step lesson companion.
+- Appearance panel with light, dark and device-following system modes, plus Forest, Ocean and Dusk palettes. The independent `english-trainer-appearance` preference is saved in localStorage; it is not part of learning-data backups.
+- Theme applies before the first paint. Native modal keyboard handling, visible focus styles, decorative artwork semantics and reduced-motion support.
+- Responsive layouts checked at phone (390px), tablet (768px) and desktop widths. The five-step lesson companion is hidden on phones to keep the exercise prominent.
+- Version 1/2 learning data continues to use the same storage key and schema. No new paid service or account is required.
 
 ## Learning experience
 
@@ -50,3 +59,7 @@ Connect `mastersreacademy-code/english-trainer` to the `english-trainer` Worker:
 ## Version 2 verification
 
 Automated tests cover Version 1 migration, invalid backups, streak/date boundaries, review intervals, writing heuristics, diagnostic recommendations, week-two progression and all 42 listening exercises. Browser QA covers migrated progress, repeat practice, refresh resume, grammar feedback, writing checklist and the full six-question level check. Microphone capture depends on permission and hardware and has not been tested with a physical microphone.
+
+## Version 3 verification
+
+All 16 automated tests pass. Browser checks cover saved dark/Ocean appearance after refresh, the Dusk palette, illustrated learning paths, lesson navigation and the five-step companion. Phone and tablet layouts have no horizontal page overflow. The original artwork brief and design choices are documented in `docs/visual-design.md`.

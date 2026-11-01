@@ -1,0 +1,2 @@
+// Apply the saved appearance before the stylesheet paints.
+try{const p=JSON.parse(localStorage.getItem('english-trainer-appearance'))||{},mode=['light','dark','system'].includes(p.mode)?p.mode:'system';document.documentElement.dataset.mode=mode==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):mode;document.documentElement.dataset.accent=['forest','ocean','dusk'].includes(p.accent)?p.accent:'forest'}catch{}
