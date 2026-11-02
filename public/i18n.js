@@ -482,3 +482,39 @@ Object.assign(vietnamese,{
 Object.assign(vietnamese,{'ready to review':'từ đến hạn ôn','Main navigation':'Điều hướng chính','A child practising first words with a parent at a sunny table':'Một em nhỏ học từ đầu tiên cùng phụ huynh bên bàn ngập nắng','Two students collaborating in a bright library':'Hai học sinh cùng học trong thư viện sáng sủa','A learner reading with headphones beside a sunny window':'Người học đeo tai nghe đọc sách bên cửa sổ đầy nắng','A learner writing in a notebook at a warm, tidy desk':'Người học viết vào vở trên bàn gọn gàng, ấm áp','A teacher guiding a small group of students':'Giáo viên hướng dẫn một nhóm học sinh','A developer working in a bright workspace':'Lập trình viên làm việc trong không gian sáng sủa','Two people enjoying a conversation at an outdoor café':'Hai người trò chuyện tại quán cà phê ngoài trời','Two colleagues discussing a project together':'Hai đồng nghiệp thảo luận dự án','A traveller exploring a sunny coastal town':'Du khách khám phá thị trấn ven biển đầy nắng','Two people enjoying a relaxed conversation at a café':'Hai người trò chuyện thoải mái tại quán cà phê'});
 
 Object.assign(vietnamese,{'Choose your language.':'Chọn ngôn ngữ của bạn.','Use the interface that feels natural to you.':'Chọn ngôn ngữ giao diện bạn thấy thoải mái.','Close language settings':'Đóng cài đặt ngôn ngữ','English exercises stay in English. Your language choice is saved automatically.':'Bài luyện tiếng Anh vẫn giữ nguyên tiếng Anh. Lựa chọn ngôn ngữ của bạn được lưu tự động.'});
+Object.assign(vietnamese,{
+'YOUR OWN LEARNING SPACE':'KHÔNG GIAN HỌC CỦA RIÊNG BẠN',
+'Make English yours.':'Biến tiếng Anh thành của bạn.',
+'Create an account. Your saved plans and progress will be private.':'Tạo tài khoản. Lộ trình đã lưu và tiến độ của bạn sẽ được giữ riêng tư.',
+'Create account →':'Tạo tài khoản →',
+'Already have an account? Sign in':'Đã có tài khoản? Đăng nhập',
+'New here? Create an account':'Lần đầu sử dụng? Tạo tài khoản',
+'Creating your private account…':'Đang tạo tài khoản riêng của bạn…',
+'Your account. Your plans. Your progress. Saved privately and available when you sign in on another device.':'Tài khoản, lộ trình và tiến độ của riêng bạn. Dữ liệu được lưu riêng tư và có thể truy cập khi đăng nhập trên thiết bị khác.',
+'That username is unavailable. Choose another one.':'Tên đăng nhập này không khả dụng. Vui lòng chọn tên khác.',
+'This workspace belongs to a different account.':'Không gian học này thuộc tài khoản khác.',
+'Invalid workspace.':'Dữ liệu học không hợp lệ.',
+'Your progress changed on another device. Export your work before reloading.':'Tiến độ đã thay đổi trên thiết bị khác. Hãy xuất bản sao lưu trước khi tải lại.',
+'Saved privately':'Đã lưu riêng tư',
+'Saving…':'Đang lưu…',
+'Not saved — retry':'Chưa lưu — thử lại',
+'Changes need review':'Cần kiểm tra thay đổi',
+'Account sync status':'Trạng thái đồng bộ tài khoản',
+'My saved plans':'Lộ trình đã lưu',
+'✓ Saved plan':'✓ Đã lưu lộ trình',
+'Save plan':'Lưu lộ trình',
+'Your writing and progress are saved privately to your account.':'Bài viết và tiến độ được lưu riêng tư vào tài khoản của bạn.',
+'Progress saved privately to your account':'Tiến độ được lưu riêng tư trong tài khoản',
+'Could not save your progress. Export a backup from Preferences.':'Không thể lưu tiến độ. Hãy xuất bản sao lưu trong Cài đặt.',
+'Could not save your progress. Please try again.':'Không thể lưu tiến độ. Vui lòng thử lại.',
+'Could not load your account data. Please try again.':'Không tải được dữ liệu tài khoản. Vui lòng thử lại.',
+'Your account data is unavailable.':'Chưa tải được dữ liệu tài khoản.',
+'Could not load your account data. Nothing has been overwritten.':'Không tải được dữ liệu tài khoản. Chưa có dữ liệu nào bị ghi đè.',
+'Reload account data':'Tải lại dữ liệu tài khoản',
+'Backup restored. Saving to your account…':'Đã khôi phục bản sao lưu. Đang lưu vào tài khoản…',
+'Use 12–128 characters. Changing the password signs out every device. Your saved learning progress stays in your account.':'Dùng 12–128 ký tự. Đổi mật khẩu sẽ đăng xuất tài khoản này trên mọi thiết bị. Tiến độ vẫn được giữ trong tài khoản.'
+});
+
+Object.assign(vietnamese,{'No saved plans yet.':'Bạn chưa lưu lộ trình nào.','Choose Save plan on any path to keep it in your private list.':'Nhấn Lưu lộ trình ở lộ trình bạn thích để thêm vào danh sách riêng.'});
+
+Object.assign(vietnamese,{'Use 3–40 letters, numbers, dots, underscores or hyphens. No spaces.':'Dùng 3–40 ký tự gồm chữ cái tiếng Anh, số, dấu chấm, gạch dưới hoặc gạch ngang. Không dùng khoảng trắng.'});

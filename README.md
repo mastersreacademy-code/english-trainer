@@ -134,3 +134,14 @@ The app now has one personal workspace. The fixed four-profile switcher and fami
 English / Tiếng Việt controls are available on login and every app page. The browser remembers the choice and synchronises it between tabs. Vietnamese covers interface labels, plan descriptions, instructions, account messages and skill tasks. Search accepts Vietnamese, including queries without accents. English passages, answer options, pronunciation examples and user writing stay in English and are marked separately from interface translations. Changing language updates the existing DOM, preserving lesson choices, timers, inputs and drafts.
 
 Plan cards use dedicated, compressed WebP illustrations. Repeated thumbnail photos in lesson lists are replaced with activity icons. Generated cover source prompts and asset locations are documented in `docs/plan-artwork.md`.
+
+
+## Feature 8: private accounts and saved plans
+
+Login now supports individual username/password registration. Each account has its own server-stored workspace, saved-plan list, active path, per-plan progress, vocabulary and writing. The server derives the owner from the signed-in session, checks CSRF and origin for writes, and rejects foreign account IDs and stale workspace revisions. GET query parameters cannot select another account. Password changes and session limits affect only the current account.
+
+The former owner login and old sessions remain valid. Only that original account can import the former browser-only workspace automatically, and only when its server workspace is empty. Other accounts always start from an empty workspace; they never read the old browser store. Once server data exists it takes precedence on every device. Old family archives are available only in the owner’s backup tools. Personal backups include saved plans and use version 8.
+
+Private workspace data is held in page memory and saved to authenticated storage, without a new persistent browser cache. A header status reports saving, success, errors and conflicting edits. Network failures retain the unsaved snapshot for retry. Concurrent device changes are not silently overwritten; export the current work before reloading if a conflict is reported. Signing out waits for pending saves and clears the account-scoped lesson session. Other tabs clear their view when the active account changes. The version identifier appears in the footer only.
+
+Accounts use usernames, without email or password recovery in this release. Keep the password in your password manager. Auth storage continues to use the existing SQLite Durable Object migration; no binding rename or credential reset is required.
