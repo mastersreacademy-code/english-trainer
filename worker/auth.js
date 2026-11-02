@@ -1,4 +1,5 @@
 import {normalizeWorkspace} from '../public/workspace.js';
+import {normalizeLearners,emptyLearners} from '../public/learner-profiles.js';
 export const COOKIE='__Host-english_session';
 export const SESSION_MS=12*60*60*1000;
 export const ITERATIONS=100000;
@@ -25,6 +26,12 @@ if(path==='/internal/verify'){const session=await this.session(request),account=
 const account=await this.storage.get('account');
 if(path==='/api/auth/session'&&method==='GET'){const session=await this.session(request),owner=await this.sessionAccount(session);return session&&owner?json({authenticated:true,accountId:owner.id,username:owner.username,legacy:owner.legacy===true,csrf:session.csrf,expires:session.expires}):json({authenticated:false,needsSetup:!account},401)}
 if(path==='/api/workspace'&&method==='GET'){const session=await this.session(request),owner=await this.sessionAccount(session);if(!owner)return json({error:'Please sign in again.'},401);const workspace=await this.storage.get('workspace:'+owner.id);return json({accountId:owner.id,revision:workspace?.revision||0,state:workspace?.state||null})}
+if(path==='/api/learners'&&method==='GET'){
+ const session=await this.session(request),owner=await this.sessionAccount(session);
+ if(!owner)return json({error:'Please sign in again.'},401);
+ const record=await this.storage.get('learners:'+owner.id);
+ return json({accountId:owner.id,revision:record?.revision||0,profiles:record?.profiles||emptyLearners()});
+}
 if(method!=='POST')return json({error:'Not found.'},404);
 if(request.headers.get('Origin')!==new URL(request.url).origin)return json({error:'Request origin is not allowed.'},403);
 if(!request.headers.get('Content-Type')?.startsWith('application/json'))return json({error:'JSON is required.'},415);
@@ -54,6 +61,19 @@ if(!user&&!account){await passwordHash(password,'unavailable-account');return js
 const hash=await passwordHash(password,user?.salt||'unavailable-account',user?.iterations||ITERATIONS);
 if(!user||!constantEqual(hash,user.hash))return json({error:'Username or password is incorrect.'},401);
 return this.newSession(user);
+}
+if(path==='/api/learners'){
+ const session=await this.session(request),owner=await this.sessionAccount(session);
+ if(!owner)return json({error:'Please sign in again.'},401);
+ if(!constantEqual(request.headers.get('X-CSRF-Token'),session.csrf))return json({error:'Please reload and try again.'},403);
+ if(body.accountId!==owner.id)return json({error:'This family belongs to a different account.'},403);
+ if(!Number.isSafeInteger(body.revision)||body.revision<0)return json({error:'Invalid revision.'},400);
+ let profiles;try{profiles=normalizeLearners(body.profiles)}catch{return json({error:'Invalid learner profiles.'},400)}
+ const key='learners:'+owner.id,current=await this.storage.get(key);
+ if(body.revision!==(current?.revision||0))return json({error:'Family profiles changed on another device. Reload before saving.'},409);
+ const revision=(current?.revision||0)+1;
+ await this.storage.put(key,{revision,profiles,updated:Date.now()});
+ return json({accountId:owner.id,revision});
 }
 if(path==='/api/workspace'){
 const session=await this.session(request),owner=await this.sessionAccount(session);
