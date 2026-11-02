@@ -10,3 +10,9 @@ window.addEventListener('pageshow',e=>{if(e.persisted){conceal();requireSession(
 window.addEventListener('focus',()=>{if(current&&Date.now()-lastCheck>30000)requireSession().catch(()=>{})});
 
 export const workspaceApi={async get(){const response=await fetch('/api/workspace',{credentials:'same-origin',cache:'no-store'});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not load your account data. Please try again.');error.status=response.status;throw error}return result},async put(revision,state){const body=JSON.stringify({accountId:current?.accountId,revision,state});const response=await fetch('/api/workspace',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':current?.csrf||''},body,keepalive:new TextEncoder().encode(body).byteLength<=60000});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not save your progress. Please try again.');error.status=response.status;throw error}return result}};
+
+// Family profiles are stored separately from the legacy learning workspace.
+export const learnerProfilesApi={
+ async get(){const response=await fetch('/api/learners',{credentials:'same-origin',cache:'no-store'});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not load learner profiles.');error.status=response.status;throw error}return result},
+ async put(revision,profiles){const response=await fetch('/api/learners',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':current?.csrf||''},body:JSON.stringify({accountId:current?.accountId,revision,profiles})});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not save learner profiles.');error.status=response.status;throw error}return result}
+};
