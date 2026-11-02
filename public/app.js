@@ -13,6 +13,7 @@ import {diagnostic,grammarFor,recommendation,writingHints,streak,reviewDays,norm
 const familyAccount=await requireSession();
 const app=document.querySelector('#app');
 let accountStore=null,parentStore=null,parentState=null,currentLearner=null,syncState='saving';
+const activeLearnerSessionKey='english-active-learner:'+familyAccount.accountId;
 function updateSync(status){syncState=status;document.querySelectorAll('[data-sync-status]').forEach(el=>{el.dataset.state=status;el.textContent=syncLabel()})}
 function syncLabel(){return {saved:'Saved privately',saving:'Saving…',error:'Not saved — retry',conflict:'Changes need review'}[syncState]}
 let accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId;
@@ -94,6 +95,7 @@ async function openLearnerWorkspace(learner){
  const next=await openAccountWorkspace({accountId:familyAccount.accountId,username:learner.nickname,legacy:false},api,updateSync);
  if(next.state.profile.name!==learner.nickname){next.state.profile.name=learner.nickname;next.queue(next.state);await next.flush()}
  accountStore=next;state=next.state;currentLearner=learner;
+ sessionStorage.setItem(activeLearnerSessionKey,learner.id);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
  clearSession();go('today');notify('Now learning as '+learner.nickname);
 }
@@ -102,6 +104,7 @@ async function returnToParentWorkspace(){
  await accountStore.flush();
  stopMedia();clearSession();
  accountStore=parentStore;state=parentState;currentLearner=null;
+ sessionStorage.removeItem(activeLearnerSessionKey);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId;
  clearSession();go('family');notify('Returned to parent workspace');
 }
@@ -137,7 +140,9 @@ initLanguage();
 async function restoreLearnerAfterReload(){
  try{
   const record=await learnerProfilesApi.get();
-  const learner=record.profiles?.learners?.find(item=>item.id===record.profiles.activeId);
+  const savedLearnerId=sessionStorage.getItem(activeLearnerSessionKey);
+  if(!savedLearnerId)return;
+  const learner=record.profiles?.learners?.find(item=>item.id===savedLearnerId);
   if(!learner)return;
   if(location.hash==='#family')return;
   await openLearnerWorkspace(learner);
