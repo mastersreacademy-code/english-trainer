@@ -2,6 +2,19 @@
 
 Personal English practice app for Cloudflare Workers static assets. No paid API is required. The production deployment is the GitHub-connected `english-trainer` Worker.
 
+## Release version format
+
+The app displays `1.[feature].[commit].[Date]`, for example `1.4.5276bd2.20261102`.
+
+- `1`: major application version.
+- `feature`: feature release number; the four-family-plan release is feature 4.
+- `commit`: first seven characters of the deployed Git commit SHA.
+- `Date`: build date in `YYYYMMDD`, using Vietnam time (`Asia/Ho_Chi_Minh`).
+
+The package’s normal npm version is `1.4.0`; the build derives major/feature from its first two components. Increase the feature number for a new feature release. Each build automatically stamps the commit and date into generated `public/version.js`. Workers Builds supplies `WORKERS_CI_COMMIT_SHA`; GitHub Actions and local Git checkouts are fallbacks. Source without Git metadata uses `dev` rather than an invented hash. The full version appears in the header and footer, including on phones via the footer. `npm run dev` and `npm run deploy` generate the stamp through their pre-hooks; Cloudflare’s configured `npm run build` generates it before deployment.
+
+This display version is independent of the existing learner-data/backup schema.
+
 ## Version 4 family plans
 
 A shared-device learner switcher selects Me, Wife, Ha Nhu (Class 5) or Ha My (Class 1). No separate accounts or sign-in are introduced.

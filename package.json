@@ -1,6 +1,6 @@
 {
   "name": "english-trainer",
-  "version": "0.4.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,9 @@
     "check": "node --check public/app.js && node --check public/learning.js && node --check public/coach.js && node --check public/appearance.js && node --check public/appearance-init.js && node --check public/visuals.js && node --check public/family.js && node --check public/child-plans.js",
     "deploy": "npx wrangler deploy",
     "build": "npm run check && npm test && node scripts/build.mjs",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "predev": "node scripts/version.mjs",
+    "predeploy": "node scripts/version.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
