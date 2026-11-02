@@ -86,6 +86,7 @@ $('#import').onchange=async e=>{try{const file=e.target.files[0];if(!file)return
 async function openLearnerWorkspace(learner){
  if(storageError)throw Error('Account workspace is unavailable');
  await accountStore.flush();
+ if(!currentLearner)parentState=state;
  stopMedia();clearSession();
  const api=learnerWorkspaceApi(learner.id);
  const remote=await api.get();
