@@ -5,6 +5,6 @@ test('calendar dates and day differences use date boundaries',()=>{assert.equal(
 test('review intervals keep hard words close',()=>{assert.equal(reviewInterval('again'),0);assert.equal(reviewInterval('hard'),1);assert.equal(reviewInterval('easy'),3)});
 
 import {topics,listening} from '../public/learning.js';
-test('all 70 starter sessions have a topic-specific listening exercise',()=>{
-const scripts=new Set();for(const goal of Object.keys(topics))for(let i=0;i<14;i++){const a=listening(goal,i);assert.ok(a.script.length>(goal==='grade1'?15:40));assert.equal(a.options.length,3);assert.ok(a.correct>=0&&a.correct<3);assert.ok(a.options[a.correct]);scripts.add(a.script)}assert.equal(scripts.size,70);
+test('all catalog sessions have a topic-specific listening exercise',()=>{
+const scripts=new Set();for(const goal of Object.keys(topics))for(let i=0;i<topics[goal].length;i++){const a=listening(goal,i);assert.ok(a.script.length>(['grade1','grade2'].includes(goal)?15:40));assert.equal(a.options.length,3);assert.ok(a.correct>=0&&a.correct<3);assert.ok(a.options[a.correct]);scripts.add(a.script)}assert.equal(scripts.size,Object.values(topics).reduce((n,t)=>n+t.length,0));
 });

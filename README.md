@@ -111,3 +111,17 @@ Automated tests cover Version 1 migration, invalid backups, streak/date boundari
 ## Version 3 verification
 
 All 16 automated tests pass. Browser checks cover saved dark/Ocean appearance after refresh, the Dusk palette, illustrated learning paths, lesson navigation and the five-step companion. Phone and tablet layouts have no horizontal page overflow. The original artwork brief and design choices are documented in `docs/visual-design.md`.
+
+
+## Feature 6: plan library
+
+The four saved learner profiles are shortcuts, not fixed curricula. Every learner can select any of 24 starter paths from **Plan library**, filter by School / Skills / Work & careers / Everyday life, search titles and descriptions, preview the session list and model passage, and select a plan.
+
+- School: Classes 1–12, general English with age-appropriate topics; not a textbook or exam-board curriculum.
+- Skills: vocabulary, listening, reading, writing, contextual grammar, pronunciation.
+- Careers: teacher, developer, business communication.
+- Everyday: conversation, workplace, travel.
+
+There are 203 distinct guided sessions: the five original 14-session paths and nineteen new 7-session starter units. These are complete starter units, not full academic-year courses. Listening uses device text-to-speech; pronunciation is self-practice with optional local recording, with no automated scoring. Suggested foundations/extension bands are guidance, not CEFR certification. Skill tracks include task-specific speaking and writing prompts.
+
+`planProgress` records a learner’s completed daily sessions for each plan. Old backups without this field migrate their completion count to the formerly active plan. Switching retains all plan positions, vocabulary, writing, and daily history. One daily completion per learner/date remains the rule. Any lesson can be opened for extra practice without advancing the daily plan. Backups keep the existing family-v4 schema with the additional per-plan counts; new backups require this version or later to restore the expanded paths.

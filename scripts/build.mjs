@@ -3,7 +3,7 @@ import {access,readFile} from 'node:fs/promises';
 const config=JSON.parse(await readFile('wrangler.jsonc','utf8'));
 if(config.assets?.directory!=='./public') throw Error('Cloudflare must serve ./public');
 await writeVersion();
-for(const name of ['version.js','login.html','auth.js','session.js','index.html','app.js','learning.js','coach.js','family.js','child-plans.js','appearance.js','appearance-init.js','visuals.js','assets/learning-worlds.webp','style.css','_headers','robots.txt']) await access(`public/${name}`);
+for(const name of ['version.js','login.html','auth.js','session.js','index.html','app.js','learning.js','coach.js','family.js','child-plans.js','plan-library.js','appearance.js','appearance-init.js','visuals.js','assets/learning-worlds.webp','style.css','_headers','robots.txt']) await access(`public/${name}`);
 const html=await readFile('public/index.html','utf8');
 if(config.main!=='worker/index.js'||config.assets.run_worker_first!==true||config.assets.binding!=='ASSETS'||config.assets.html_handling!=='none')throw Error('Authentication must run before static assets');
 if(!html.includes('noindex')) throw Error('Missing development indexing protection');
