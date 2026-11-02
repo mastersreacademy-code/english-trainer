@@ -32,10 +32,19 @@ if(path==='/api/learners'&&method==='GET'){
  const record=await this.storage.get('learners:'+owner.id);
  return json({accountId:owner.id,revision:record?.revision||0,profiles:record?.profiles||emptyLearners()});
 }
+if(path==='/api/learner-workspace'&&method==='GET'){
+ const session=await this.session(request),owner=await this.sessionAccount(session);
+ if(!owner)return json({error:'Please sign in again.'},401);
+ const learnerId=new URL(request.url).searchParams.get('learnerId');
+ const family=await this.storage.get('learners:'+owner.id);
+ if(!family?.profiles?.learners?.some(item=>item.id===learnerId))return json({error:'Learner not found in this account.'},404);
+ const workspace=await this.storage.get('learner-workspace:'+owner.id+':'+learnerId);
+ return json({accountId:owner.id,learnerId,revision:workspace?.revision||0,state:workspace?.state||null});
+}
 if(method!=='POST')return json({error:'Not found.'},404);
 if(request.headers.get('Origin')!==new URL(request.url).origin)return json({error:'Request origin is not allowed.'},403);
 if(!request.headers.get('Content-Type')?.startsWith('application/json'))return json({error:'JSON is required.'},415);
-const maximum=path==='/api/workspace'?2000000:4096;const length=Number(request.headers.get('Content-Length')||0);if(length>maximum)return json({error:'Request is too large.'},413);
+const maximum=path==='/api/workspace'||path==='/api/learner-workspace'?2000000:4096;const length=Number(request.headers.get('Content-Length')||0);if(length>maximum)return json({error:'Request is too large.'},413);
 let body;try{const reader=request.body?.getReader();if(!reader)throw Error();let size=0,text='';const decoder=new TextDecoder();while(true){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>maximum){await reader.cancel();return json({error:'Request is too large.'},413)}text+=decoder.decode(part.value,{stream:true})}text+=decoder.decode();body=JSON.parse(text);if(!body||typeof body!=='object'||Array.isArray(body))throw Error()}catch{return json({error:'Invalid request.'},400)}
 if(path==='/api/auth/setup'){
 if(account)return json({error:'Family login is already activated. Sign in instead.'},409);
@@ -74,6 +83,21 @@ if(path==='/api/learners'){
  const revision=(current?.revision||0)+1;
  await this.storage.put(key,{revision,profiles,updated:Date.now()});
  return json({accountId:owner.id,revision});
+}
+if(path==='/api/learner-workspace'){
+ const session=await this.session(request),owner=await this.sessionAccount(session);
+ if(!owner)return json({error:'Please sign in again.'},401);
+ if(!constantEqual(request.headers.get('X-CSRF-Token'),session.csrf))return json({error:'Please reload and try again.'},403);
+ if(body.accountId!==owner.id)return json({error:'This workspace belongs to a different account.'},403);
+ if(typeof body.learnerId!=='string'||!Number.isSafeInteger(body.revision)||body.revision<0)return json({error:'Invalid learner workspace.'},400);
+ const family=await this.storage.get('learners:'+owner.id);
+ if(!family?.profiles?.learners?.some(item=>item.id===body.learnerId))return json({error:'Learner not found in this account.'},404);
+ let state;try{state=normalizeWorkspace(body.state)}catch{return json({error:'Invalid learner workspace.'},400)}
+ const key='learner-workspace:'+owner.id+':'+body.learnerId,current=await this.storage.get(key);
+ if(body.revision!==(current?.revision||0))return json({error:'Learner progress changed on another device. Reload before saving.'},409);
+ const revision=(current?.revision||0)+1;
+ await this.storage.put(key,{revision,state,updated:Date.now()});
+ return json({accountId:owner.id,learnerId:body.learnerId,revision});
 }
 if(path==='/api/workspace'){
 const session=await this.session(request),owner=await this.sessionAccount(session);
