@@ -133,4 +133,14 @@ document.querySelectorAll('[data-nav-icon]').forEach(el=>el.innerHTML=icon(el.da
 document.querySelector('#release-version').textContent='Version '+buildInfo.version;
 initAppearance();
 initLanguage();
-window.addEventListener('hashchange',render);window.addEventListener('pagehide',()=>{stopMedia();accountStore?.flush().catch(()=>{})});render();
+// Restore the selected child's workspace after reload before showing learning content.
+async function restoreLearnerAfterReload(){
+ try{
+  const record=await learnerProfilesApi.get();
+  const learner=record.profiles?.learners?.find(item=>item.id===record.profiles.activeId);
+  if(!learner)return;
+  if(location.hash==='#family')return;
+  await openLearnerWorkspace(learner);
+ }catch(error){storageError=true;notify('Could not restore the selected learner. No progress was overwritten.');render()}
+}
+window.addEventListener('hashchange',render);window.addEventListener('pagehide',()=>{stopMedia();accountStore?.flush().catch(()=>{})});render();restoreLearnerAfterReload();
