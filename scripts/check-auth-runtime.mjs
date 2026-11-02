@@ -16,6 +16,8 @@ mf=new Miniflare(convertV4MiniflareOptions({name:'english-auth-test',modules:tru
 const call=(path,body,cookie,csrf)=>mf.dispatchFetch('https://english.test'+path,{redirect:'manual',...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)}),headers:{...(body===undefined?{}:{Origin:'https://english.test','Content-Type':'application/json'}),...(cookie?{Cookie:cookie}:{}),...(csrf?{'X-CSRF-Token':csrf}:{})}});
 {const response=await call('/');if(response.status!==303)throw Error('Gate runtime: '+response.status+' '+(await response.text()).slice(0,1600));}
 assert.equal((await call('/app.js')).status,303);
+assert.equal((await call('/i18n.js')).status,200);
+assert.equal((await call('/workspace.js')).status,303);
 {const login=await call('/login');assert.equal(login.status,200);assert.equal(login.headers.get('Location'),null);assert.match(await login.text(),/auth-form/)}
 const activated=await call('/api/auth/setup',{token,username:'runtime-family',password});
 if(activated.status!==200)throw Error('Runtime activation failed: '+activated.status+' '+await activated.text());
