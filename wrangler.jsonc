@@ -1,1 +1,37 @@
-{"name":"english-trainer","compatibility_date":"2026-11-01","assets":{"directory":"./public"}}
+{
+  "name": "english-trainer",
+  "compatibility_date": "2026-10-30",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "main": "worker/index.js",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "FAMILY_AUTH",
+        "class_name": "FamilyAuth"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "family-auth-v1",
+      "new_sqlite_classes": [
+        "FamilyAuth"
+      ]
+    }
+  ],
+  "vars": {
+    "SETUP_TOKEN_HASH": "90a5ccdafafa32659daa10ccfecfe018529d129a9cd5ba20033eb6528bc69a6f"
+  },
+  "build": {
+    "command": "node scripts/version.mjs",
+    "watch_dir": [
+      "worker",
+      "scripts",
+      "package.json"
+    ]
+  }
+}

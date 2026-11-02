@@ -1,16 +1,18 @@
 {
   "name": "english-trainer",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check public/app.js && node --check public/learning.js && node --check public/coach.js && node --check public/appearance.js && node --check public/appearance-init.js && node --check public/visuals.js && node --check public/family.js && node --check public/child-plans.js",
+    "check": "node --check public/app.js && node --check public/learning.js && node --check public/coach.js && node --check public/appearance.js && node --check public/appearance-init.js && node --check public/visuals.js && node --check public/family.js && node --check public/child-plans.js && node --check worker/index.js && node --check worker/auth.js && node --check public/auth.js && node --check public/session.js && node --check worker/router.js",
     "deploy": "npx wrangler deploy",
     "build": "npm run check && npm test && node scripts/build.mjs",
     "dev": "wrangler dev",
     "predev": "node scripts/version.mjs",
-    "predeploy": "node scripts/version.mjs"
+    "predeploy": "node scripts/version.mjs",
+    "prepare": "node scripts/version.mjs",
+    "test:runtime": "node scripts/check-auth-runtime.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
