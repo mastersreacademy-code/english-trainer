@@ -31,5 +31,14 @@ assert.equal((await call('/api/auth/logout',{},cookie,session.csrf)).status,200)
 assert.equal((await call('/',undefined,cookie)).status,303);
 assert.equal((await call('/api/auth/login',{username:'runtime-family',password:'wrong'})).status,401);
 assert.equal((await call('/api/auth/login',{username:'runtime-family',password})).status,200);
-console.log('Cloudflare runtime integration passed: static gating, one-time activation, SQLite sessions, login and logout.');
+const register=async username=>{const response=await call('/api/auth/register',{username,password});assert.equal(response.status,200);const cookie=response.headers.get('set-cookie').split(';')[0],session=await(await call('/api/auth/session',undefined,cookie)).json();return{cookie,...session}};
+const alice=await register('runtime-alice'),bob=await register('runtime-bob');assert.notEqual(alice.accountId,bob.accountId);
+const state={profile:{name:'Alice',goal:'developer',level:'beginner',minutes:'20'},savedPlans:['developer','writing'],planProgress:{developer:1},completed:[],words:[],drafts:{private:'Only Alice may see this.'}};
+assert.equal((await call('/api/workspace')).status,401);
+assert.equal((await call('/api/workspace',{accountId:alice.accountId,revision:0,state},alice.cookie,alice.csrf)).status,200);
+const mine=await(await call('/api/workspace',undefined,alice.cookie)).json();assert.equal(mine.state.drafts.private,state.drafts.private);assert.deepEqual(mine.state.savedPlans,['developer','writing']);
+const other=await(await call('/api/workspace?accountId='+alice.accountId,undefined,bob.cookie)).json();assert.equal(other.accountId,bob.accountId);assert.equal(other.state,null);
+assert.equal((await call('/api/workspace',{accountId:alice.accountId,revision:1,state},bob.cookie,bob.csrf)).status,403);
+assert.equal((await call('/api/workspace',{accountId:alice.accountId,revision:0,state},alice.cookie,alice.csrf)).status,409);
+console.log('Cloudflare runtime integration passed: login, registration, private account workspaces, saved plans, cross-account denial and revision protection.');
 }finally{if(mf)await mf.dispose();await rm(dir,{recursive:true,force:true})}

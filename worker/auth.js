@@ -1,3 +1,4 @@
+import {normalizeWorkspace} from '../public/workspace.js';
 export const COOKIE='__Host-english_session';
 export const SESSION_MS=12*60*60*1000;
 export const ITERATIONS=100000;
@@ -16,41 +17,63 @@ fetch(request){return this.ctx.blockConcurrencyWhile(()=>this.handle(request))}
 async session(request){const token=readToken(request);if(!token)return null;const key='session:'+await digest(token),session=await this.storage.get(key);if(!session)return null;if(session.expires<=Date.now()){await this.storage.delete(key);return null}return{...session,key}}
 async scheduleCleanup(){if(!await this.storage.getAlarm())await this.storage.setAlarm(Date.now()+60*60*1000)}
 async rateAllowed(request){const now=Date.now();let global=await this.storage.get('rate:global');if(!global||global.expires<=now)global={count:0,expires:now+15*60*1000};if(global.count>=30)return false;global.count++;await this.storage.put('rate:global',global);const key='rate:'+await digest(request.headers.get('X-Auth-Client-IP')||'unknown');let local=await this.storage.get(key);if(!local||local.expires<=now)local={count:0,expires:now+15*60*1000};const allowed=local.count<8;local.count=Math.min(local.count+1,8);await this.storage.put(key,local);await this.scheduleCleanup();return allowed}
-async newSession(){const token=randomToken(),session={csrf:randomToken(),created:Date.now(),expires:Date.now()+SESSION_MS};await this.storage.put('session:'+await digest(token),session);const sessions=await this.storage.list({prefix:'session:'});const sorted=[...sessions].sort((a,b)=>a[1].created-b[1].created);for(const[key]of sorted.slice(0,Math.max(0,sorted.length-20)))await this.storage.delete(key);await this.scheduleCleanup();return json({ok:true},200,{'Set-Cookie':sessionCookie(token)})}
+async newSession(account){const token=randomToken(),session={accountId:account.id||'legacy',username:account.username,csrf:randomToken(),created:Date.now(),expires:Date.now()+SESSION_MS};await this.storage.put('session:'+await digest(token),session);const sessions=await this.storage.list({prefix:'session:'});const sorted=[...sessions].filter(([,s])=>(s.accountId||'legacy')===session.accountId).sort((a,b)=>a[1].created-b[1].created);for(const[key]of sorted.slice(0,Math.max(0,sorted.length-20)))await this.storage.delete(key);await this.scheduleCleanup();return json({ok:true,accountId:session.accountId},200,{'Set-Cookie':sessionCookie(token)})}
+async sessionAccount(session){if(!session)return null;if(!session.accountId||session.accountId==='legacy'){const account=await this.storage.get('account');return account?{...account,id:'legacy',legacy:true}:null}const account=await this.storage.get('user:'+session.username);return account?.id===session.accountId?account:null}
 async handle(request){
 const path=new URL(request.url).pathname,method=request.method;
-if(path==='/internal/verify'){const session=await this.session(request);return json({authenticated:!!session},session?200:401)}
+if(path==='/internal/verify'){const session=await this.session(request),account=await this.sessionAccount(session);return json({authenticated:!!account},account?200:401)}
 const account=await this.storage.get('account');
-if(path==='/api/auth/session'&&method==='GET'){const session=await this.session(request);return session&&account?json({authenticated:true,username:account.username,csrf:session.csrf,expires:session.expires}):json({authenticated:false,needsSetup:!account},401)}
+if(path==='/api/auth/session'&&method==='GET'){const session=await this.session(request),owner=await this.sessionAccount(session);return session&&owner?json({authenticated:true,accountId:owner.id,username:owner.username,legacy:owner.legacy===true,csrf:session.csrf,expires:session.expires}):json({authenticated:false,needsSetup:!account},401)}
+if(path==='/api/workspace'&&method==='GET'){const session=await this.session(request),owner=await this.sessionAccount(session);if(!owner)return json({error:'Please sign in again.'},401);const workspace=await this.storage.get('workspace:'+owner.id);return json({accountId:owner.id,revision:workspace?.revision||0,state:workspace?.state||null})}
 if(method!=='POST')return json({error:'Not found.'},404);
 if(request.headers.get('Origin')!==new URL(request.url).origin)return json({error:'Request origin is not allowed.'},403);
 if(!request.headers.get('Content-Type')?.startsWith('application/json'))return json({error:'JSON is required.'},415);
-const length=Number(request.headers.get('Content-Length')||0);if(length>4096)return json({error:'Request is too large.'},413);
-let body;try{const reader=request.body?.getReader();if(!reader)throw Error();let size=0,text='';const decoder=new TextDecoder();while(true){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>4096){await reader.cancel();return json({error:'Request is too large.'},413)}text+=decoder.decode(part.value,{stream:true})}text+=decoder.decode();body=JSON.parse(text);if(!body||typeof body!=='object'||Array.isArray(body))throw Error()}catch{return json({error:'Invalid request.'},400)}
+const maximum=path==='/api/workspace'?2000000:4096;const length=Number(request.headers.get('Content-Length')||0);if(length>maximum)return json({error:'Request is too large.'},413);
+let body;try{const reader=request.body?.getReader();if(!reader)throw Error();let size=0,text='';const decoder=new TextDecoder();while(true){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>maximum){await reader.cancel();return json({error:'Request is too large.'},413)}text+=decoder.decode(part.value,{stream:true})}text+=decoder.decode();body=JSON.parse(text);if(!body||typeof body!=='object'||Array.isArray(body))throw Error()}catch{return json({error:'Invalid request.'},400)}
 if(path==='/api/auth/setup'){
 if(account)return json({error:'Family login is already activated. Sign in instead.'},409);
 if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
 if(typeof body.token!=='string'||body.token.length!==64||!this.env.SETUP_TOKEN_HASH||!constantEqual(await digest(body.token),this.env.SETUP_TOKEN_HASH))return json({error:'This activation link is not valid.'},403);
 const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
 if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password))return json({error:'Use a 3–40 character username and a password of 12–128 characters.'},400);
-const salt=randomToken(),hash=await passwordHash(body.password,salt);await this.storage.put('account',{username,salt,hash,iterations:ITERATIONS,created:Date.now()});return this.newSession();
+if(await this.storage.get('user:'+username))return json({error:'That username is unavailable. Choose another one.'},409);
+const salt=randomToken(),hash=await passwordHash(body.password,salt);await this.storage.put('account',{username,salt,hash,iterations:ITERATIONS,created:Date.now()});return this.newSession({username,id:'legacy'});
+}
+if(path==='/api/auth/register'){
+if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
+const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
+if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password))return json({error:'Use a 3–40 character username and a password of 12–128 characters.'},400);
+if(account?.username===username||await this.storage.get('user:'+username))return json({error:'That username is unavailable. Choose another one.'},409);
+const salt=randomToken(),user={id:randomToken(),username,salt,hash:await passwordHash(body.password,salt),iterations:ITERATIONS,created:Date.now()};await this.storage.put('user:'+username,user);return this.newSession(user);
 }
 if(path==='/api/auth/login'){
 if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
-if(!account)return json({error:'Family login has not been activated. Open your private activation link.'},409);
 const username=typeof body.username==='string'?body.username.trim().toLowerCase():'',password=typeof body.password==='string'&&body.password.length<=128?body.password:'';
-const hash=await passwordHash(password,account.salt,account.iterations);
-if(!constantEqual(hash,account.hash)||!constantEqual(username,account.username))return json({error:'Username or password is incorrect.'},401);
-return this.newSession();
+const user=account?.username===username?{...account,id:'legacy',legacy:true}:(/^[a-z0-9._-]{3,40}$/.test(username)?await this.storage.get('user:'+username):null);
+if(!user&&!account){await passwordHash(password,'unavailable-account');return json({error:'Username or password is incorrect.'},401)}
+const hash=await passwordHash(password,user?.salt||'unavailable-account',user?.iterations||ITERATIONS);
+if(!user||!constantEqual(hash,user.hash))return json({error:'Username or password is incorrect.'},401);
+return this.newSession(user);
+}
+if(path==='/api/workspace'){
+const session=await this.session(request),owner=await this.sessionAccount(session);
+if(!owner)return json({error:'Please sign in again.'},401);
+if(!constantEqual(request.headers.get('X-CSRF-Token'),session.csrf))return json({error:'Please reload and try again.'},403);
+if(body.accountId!==owner.id)return json({error:'This workspace belongs to a different account.'},403);
+if(!Number.isSafeInteger(body.revision)||body.revision<0)return json({error:'Invalid workspace.'},400);
+let state;try{state=normalizeWorkspace(body.state)}catch{return json({error:'Invalid workspace.'},400)}
+const key='workspace:'+owner.id,current=await this.storage.get(key);
+if(body.revision!==(current?.revision||0))return json({error:'Your progress changed on another device. Export your work before reloading.'},409);
+const revision=(current?.revision||0)+1;await this.storage.put(key,{revision,state,updated:Date.now()});return json({accountId:owner.id,revision});
 }
 if(path==='/api/auth/logout'||path==='/api/auth/password'){
-const session=await this.session(request);if(!session)return json({error:'Please sign in again.'},401,{'Set-Cookie':sessionCookie('',0)});
+const session=await this.session(request),owner=await this.sessionAccount(session);if(!session||!owner)return json({error:'Please sign in again.'},401,{'Set-Cookie':sessionCookie('',0)});
 if(!constantEqual(request.headers.get('X-CSRF-Token'),session.csrf))return json({error:'Please reload and try again.'},403);
 if(path==='/api/auth/logout'){await this.storage.delete(session.key);return json({ok:true},200,{'Set-Cookie':sessionCookie('',0)})}
 if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
-if(!account||!validPassword(body.newPassword)||typeof body.currentPassword!=='string'||body.currentPassword.length>128)return json({error:'Enter your current password and a new password of 12–128 characters.'},400);
-if(!constantEqual(await passwordHash(body.currentPassword,account.salt,account.iterations),account.hash))return json({error:'Current password is incorrect.'},401);
-const salt=randomToken();await this.storage.put('account',{...account,salt,hash:await passwordHash(body.newPassword,salt),iterations:ITERATIONS});const sessions=await this.storage.list({prefix:'session:'});for(const key of sessions.keys())await this.storage.delete(key);return json({ok:true},200,{'Set-Cookie':sessionCookie('',0)});
+if(!validPassword(body.newPassword)||typeof body.currentPassword!=='string'||body.currentPassword.length>128)return json({error:'Enter your current password and a new password of 12–128 characters.'},400);
+if(!constantEqual(await passwordHash(body.currentPassword,owner.salt,owner.iterations),owner.hash))return json({error:'Current password is incorrect.'},401);
+const salt=randomToken();await this.storage.put(owner.id==='legacy'?'account':'user:'+owner.username,{...owner,salt,hash:await passwordHash(body.newPassword,salt),iterations:ITERATIONS});const sessions=await this.storage.list({prefix:'session:'});for(const[key,value]of sessions)if((value.accountId||'legacy')===owner.id)await this.storage.delete(key);return json({ok:true},200,{'Set-Cookie':sessionCookie('',0)});
 }
 return json({error:'Not found.'},404);
 }
