@@ -518,3 +518,5 @@ Object.assign(vietnamese,{
 Object.assign(vietnamese,{'No saved plans yet.':'Bạn chưa lưu lộ trình nào.','Choose Save plan on any path to keep it in your private list.':'Nhấn Lưu lộ trình ở lộ trình bạn thích để thêm vào danh sách riêng.'});
 
 Object.assign(vietnamese,{'Use 3–40 letters, numbers, dots, underscores or hyphens. No spaces.':'Dùng 3–40 ký tự gồm chữ cái tiếng Anh, số, dấu chấm, gạch dưới hoặc gạch ngang. Không dùng khoảng trắng.'});
+
+Object.assign(vietnamese,{'Export previous browser progress':'Xuất tiến độ cũ trên trình duyệt'});
