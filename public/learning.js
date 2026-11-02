@@ -1,9 +1,10 @@
+import {libraryLessons} from './plan-library.js';
 import {childPlans} from './child-plans.js';
 export const topics={conversation:['Introducing yourself','Your daily routine','Ordering a coffee','Talking about hobbies','Making plans','Asking for directions','Your week in review'],work:['Introducing your work','Your working day','Asking for help','Arranging a meeting','Giving an update','Explaining a problem','Your week in review'],travel:['Meeting new people','At the airport','Ordering food','Checking into a hotel','Buying a ticket','Asking for directions','Your week in review']};
 export const vocabulary=[['confident','tự tin','I feel confident when I practise.'],['usually','thường xuyên','I usually study after dinner.'],['improve','cải thiện','I want to improve my English.'],['available','có sẵn / rảnh','Are you available tomorrow?'],['prefer','thích hơn','I prefer tea to coffee.'],['journey','hành trình','Learning is a journey.'],['explain','giải thích','Could you explain that again?']];
 export function dateKey(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 export function dayIndex(start,now=new Date()){const a=start.split('-').map(Number);return Math.max(0,Math.floor((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())-Date.UTC(a[0],a[1]-1,a[2]))/86400000))}
-export function lesson(profile,completed){const index=completed.length%14;return {index,title:topics[profile.goal][index],minutes:profile.minutes,level:profile.level,word:vocabularyFor(profile.goal,index),review:index===6||index===13}}
+export function lesson(profile,completed){const index=completed.length%topics[profile.goal].length;return {index,title:topics[profile.goal][index],minutes:profile.minutes,level:profile.level,word:vocabularyFor(profile.goal,index),review:index===6||index===13}}
 export function reviewInterval(rating){return rating==='again'?0:rating==='hard'?1:3}
 
 const conversations={
@@ -32,7 +33,7 @@ travel:[
 ['Excuse me, how do I get to the museum? Walk across the bridge, then turn right. It is opposite the park.','Where is the museum?',['Next to the hotel','Opposite the park','Inside the station'],1],
 ['I can now buy a ticket and check into a hotel. Asking for directions is still difficult, so I will review that lesson tomorrow.','What will the traveller review?',['Hotel bookings','Buying tickets','Directions'],2]]};
 export function listening(goal,index,level='beginner'){
-const [script,question,options,correct]=conversations[goal][index%14];
+const [script,question,options,correct]=conversations[goal][index%topics[goal].length];
 return {script,question,options,correct};
 }
 
@@ -76,4 +77,12 @@ for(const [goal,lessons] of Object.entries(childPlans)){
   topics[goal]=lessons.map(l=>l.title);
   conversations[goal]=lessons.map(l=>[l.script,l.question,l.options,l.correct]);
 }
-export function vocabularyFor(goal,index){return childPlans[goal]?.[index%14]?.word||vocabulary[index%14]}
+for(const [goal,lessons] of Object.entries(libraryLessons)){
+ topics[goal]=lessons.map(l=>l.title);
+ conversations[goal]=lessons.map(l=>[l.script,l.question,l.options,l.correct]);
+}
+export function vocabularyFor(goal,index){return libraryLessons[goal]?.[index%libraryLessons[goal].length]?.word||childPlans[goal]?.[index%14]?.word||vocabulary[index%14]}
+export function planCount(state,goal=state.profile.goal){return state.planProgress?.[goal]??(goal===state.profile.goal?state.completed.length:0)}
+export function nextLesson(state){return lesson(state.profile,Array(planCount(state)).fill(null))}
+export function lessonPrompts(goal,index){return libraryLessons[goal]?.[index%libraryLessons[goal].length]||null}
+
