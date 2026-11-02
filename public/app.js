@@ -2,7 +2,7 @@ import {openAccountWorkspace} from './account-store.js';
 import {initLanguage,languageControl,locale,translate,applyLanguage} from './i18n.js';
 import {workspaceKey,workspaceSessionKey,freshWorkspace,normalizeWorkspace,workspaceBackup,loadWorkspace,backupCandidates} from './workspace.js';
 import {plans,planGroups,planFor,filterPlans} from './plan-library.js';
-import {requireSession,signOut,changePassword,workspaceApi,learnerProfilesApi} from './session.js';
+import {requireSession,signOut,changePassword,workspaceApi,learnerProfilesApi,learnerWorkspaceApi} from './session.js';
 import {buildInfo} from './version.js';
 import {familyKey,isChild} from './family.js';
 import {addLearner,chooseLearner,deleteLearner} from './learner-profiles.js';
@@ -12,12 +12,12 @@ import {topics,vocabularyFor,dateKey,lesson,listening,planCount,nextLesson,lesso
 import {diagnostic,grammarFor,recommendation,writingHints,streak,reviewDays,normalizeState,emptyState} from './coach.js';
 const familyAccount=await requireSession();
 const app=document.querySelector('#app');
-let accountStore=null,syncState='saving';
+let accountStore=null,parentStore=null,parentState=null,currentLearner=null,syncState='saving';
 function updateSync(status){syncState=status;document.querySelectorAll('[data-sync-status]').forEach(el=>{el.dataset.state=status;el.textContent=syncLabel()})}
 function syncLabel(){return {saved:'Saved privately',saving:'Saving…',error:'Not saved — retry',conflict:'Changes need review'}[syncState]}
-const accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId;
+let accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId;
 let state=freshWorkspace(),storageError=false;
-try{accountStore=await openAccountWorkspace(familyAccount,workspaceApi,updateSync,localStorage);state=accountStore.state}catch{storageError=true}
+try{accountStore=await openAccountWorkspace(familyAccount,workspaceApi,updateSync,localStorage);state=accountStore.state;parentStore=accountStore;parentState=state}catch{storageError=true}
 let active=null,revealed=false,quizIndex=0,quizAnswers=[],quizChosen=null,timer=null,remaining=0,recorder=null,recordStream=null,recordURL=null,recordTimeout=null;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $=s=>document.querySelector(s);
@@ -83,8 +83,29 @@ function settings(){setup();addAccountSettings();$('#setup').insertAdjacentHTML(
 function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 on('#export',()=>download(workspaceBackup(state),`english-trainer-${dateKey()}.json`));on('#export-browser',()=>download(workspaceBackup(normalizeWorkspace(JSON.parse(localStorage.getItem(workspaceKey)))),`english-trainer-previous-browser-${dateKey()}.json`));on('#export-archive',()=>download(JSON.parse(localStorage.getItem(familyKey)),`english-trainer-previous-profiles-${dateKey()}.json`));
 $('#import').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>8000000)throw Error();const candidates=backupCandidates(JSON.parse(await file.text()));$('#restore-preview').innerHTML=`${candidates.length>1?'<label for="restore-source">Previous profile to restore</label><select id="restore-source">'+candidates.map((c,i)=>`<option value="${i}">${esc(c.label)}</option>`).join('')+'</select>':''}<p class="feedback">Restore this backup? This replaces your current workspace. Export your current progress first if you want to keep both.</p><div class="actions"><button id="confirm-restore">Restore this backup</button><button class="secondary" id="cancel-restore">Cancel</button></div>`;on('#confirm-restore',()=>{try{const candidate=candidates[Number($('#restore-source')?.value||0)];if(!candidate)throw Error();stopMedia();clearSession();const restored=normalizeWorkspace(candidate.state);accountStore.queue(restored);state=restored;storageError=false;revealed=false;go('today');notify('Backup restored. Saving to your account…')}catch{notify('Could not restore. Your saved backup file is unchanged.')}});on('#cancel-restore',()=>{$('#restore-preview').innerHTML='';$('#import').value=''})}catch{notify('This backup is invalid or has an unknown plan. Nothing has changed.')}};}
+async function openLearnerWorkspace(learner){
+ if(storageError)throw Error('Account workspace is unavailable');
+ await accountStore.flush();
+ stopMedia();clearSession();
+ const api=learnerWorkspaceApi(learner.id);
+ const remote=await api.get();
+ if(remote.accountId!==familyAccount.accountId||remote.learnerId!==learner.id)throw Error('Learner account mismatch');
+ const next=await openAccountWorkspace({accountId:familyAccount.accountId,username:learner.nickname,legacy:false},api,updateSync);
+ if(next.state.profile.name!==learner.nickname){next.state.profile.name=learner.nickname;next.queue(next.state);await next.flush()}
+ accountStore=next;state=next.state;currentLearner=learner;
+ accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
+ clearSession();go('today');notify('Now learning as '+learner.nickname);
+}
+async function returnToParentWorkspace(){
+ if(!currentLearner)return;
+ await accountStore.flush();
+ stopMedia();clearSession();
+ accountStore=parentStore;state=parentState;currentLearner=null;
+ accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId;
+ clearSession();go('family');notify('Returned to parent workspace');
+}
 async function familyDashboard(){
- app.innerHTML=header()+'<h1>Family profiles</h1><p>Manage learner profiles under your parent account. Individual learning progress is not connected yet; your existing workspace remains unchanged.</p><section class="card form" id="family-content"><p>Loading family profiles…</p></section>';
+ app.innerHTML=header()+'<h1>Family profiles</h1><p>Manage learner profiles under your parent account. Each child has separate saved learning progress. Select a learner to open their learning space. Your original workspace stays unchanged.</p><section class="card form" id="family-content"><p>Loading family profiles…</p></section>';
  const container=$('#family-content');
  try{
   let record=await learnerProfilesApi.get();
@@ -92,17 +113,18 @@ async function familyDashboard(){
   function draw(){
    const profiles=record.profiles;
    container.innerHTML='<h2>Your learners</h2><p class="small">Only English is available now. Mathematics and Vietnamese are planned.</p>'+
-    (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
+    (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
     '<h3>Add a child</h3><form id="add-learner"><label for="learner-nickname">Nickname</label><input id="learner-nickname" name="nickname" maxlength="40" required autocomplete="off"><label for="learner-grade">Class level</label><select id="learner-grade" name="grade">'+Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'">Class '+(i+1)+'</option>').join('')+'</select><button type="submit">Add learner</button></form><p id="family-error" role="status" aria-live="polite"></p>';
    async function persist(next){const result=await learnerProfilesApi.put(record.revision,next);if(result.accountId!==familyAccount.accountId)throw Error('Account mismatch');record={...record,revision:result.revision,profiles:next};draw();notify('Family profiles saved.')}
    container.querySelector('#add-learner').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{const id=crypto.randomUUID().replaceAll('-','');await persist(addLearner(record.profiles,{nickname:form.elements.nickname.value,grade:Number(form.elements.grade.value),subjects:['english']},id))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}};
    container.querySelectorAll('[data-select-learner]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await persist(chooseLearner(record.profiles,button.dataset.selectLearner))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
+   container.querySelectorAll('[data-open-learner]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{const learner=record.profiles.learners.find(item=>item.id===button.dataset.openLearner);if(!learner)throw Error('Learner not found');await openLearnerWorkspace(learner)}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
    container.querySelectorAll('[data-delete-learner]').forEach(button=>button.onclick=async()=>{if(button.dataset.confirmRemove!=='yes'){button.dataset.confirmRemove='yes';button.textContent='Confirm remove';button.setAttribute('aria-label','Confirm removal of this child profile');return}button.disabled=true;try{await persist(deleteLearner(record.profiles,button.dataset.deleteLearner))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
   }
   draw();
  }catch(error){container.innerHTML='<p>Could not load family profiles. Your existing learning data is safe.</p><p class="small">'+esc(error.message)+'</p><button id="family-retry">Try again</button>';on('#family-retry',familyDashboard)}
 }
-function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
+function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';if(currentLearner&&page==='family'){app.innerHTML=header()+'<h1>Learning as '+esc(currentLearner.nickname)+'</h1><p>Save this learner’s progress before returning to the parent account.</p><button id="return-to-parent">Return to family profiles</button><p id="return-error" role="status"></p>';on('#return-to-parent',async()=>{const button=$('#return-to-parent');button.disabled=true;try{await returnToParentWorkspace()}catch(error){$('#return-error').textContent=error.message;button.disabled=false}});return}document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
 
 document.addEventListener('click',async e=>{if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){notify(error.message);button.disabled=false}return}});
 document.querySelector('.skip-link')?.addEventListener('click',e=>{e.preventDefault();app.focus()});
