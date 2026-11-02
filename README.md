@@ -1,17 +1,31 @@
-# English Trainer · Version 4
+# English Trainer · Feature 5 — Family login
 
 Personal English practice app for Cloudflare Workers static assets. No paid API is required. The production deployment is the GitHub-connected `english-trainer` Worker.
+
+## Shared family login
+
+One username/password protects the site before the existing four-learner switcher. Sign in at `/login`. The private, one-time activation link supplied in chat opens the initial account form; choose a username (3–40 letters/numbers/dots/underscores/hyphens) and a password (12–128 characters). The token is in the URL fragment, removed immediately by the client and sent only in the same-origin setup POST. Only its SHA-256 verifier is in the configuration; the actual activation token is never committed. Initial account creation is serialized and cannot be repeated once the family account exists.
+
+Authentication is enforced by `worker/index.js` before assets, using `assets.run_worker_first=true` and a SQLite-backed Durable Object binding. The object stores the salted password verifier, opaque sessions and attempt limits. No plaintext password is stored. Login uses PBKDF2-SHA256 with a fresh 256-bit salt and 100,000 iterations. Sessions use random 256-bit tokens whose hashes are stored server-side; cookies are Secure, HttpOnly, SameSite=Strict, host-only and valid for twelve hours. All protected responses are private/no-store.
+
+Sign out revokes the server session. Preferences includes a password-change form requiring the current password; changing the password revokes every session. Password changes and logout require both a same-origin request and the session CSRF token. Login/setup/password attempts are limited to eight per client IP and thirty globally per fifteen minutes, with hourly cleanup. At most twenty sessions are retained. There is no public registration or email-based password recovery.
+
+The four learners remain profile switches within one shared account. Existing browser progress and backups are preserved. Signing in does not upload learning records or synchronize them between devices; sign-out does not delete them or encrypt browser storage. Family credentials and authentication sessions are separate from learning-data backups.
+
+Cloudflare automatically provisions the `FamilyAuth` SQLite Durable Object namespace using the tracked migration during deployment. Preserve its class, binding and migration when updating the app. No manual database ID or secret entry is needed for this activation flow. `SETUP_TOKEN_HASH` is a public verifier, not a password or session secret. Development credentials in automated tests are synthetic, isolated and never sent to the production service.
+
+Validation: 33 Node tests cover password hashing, one-time/concurrent activation, gating app/scripts, invalid credentials, expiry, CSRF/origin checks, logout/replay, password changes, limits and oversized requests, in addition to existing learning tests. `npm run test:runtime` exercises the bundled Worker and actual SQLite Durable Object runtime using ephemeral test storage and a test asset binding. Wrangler deployment dry run also validates the real static-asset binding and migration configuration. GitHub Actions installs locked dependencies, runs the build/tests and the runtime integration check.
 
 ## Release version format
 
 The app displays `1.[feature].[commit].[Date]`, for example `1.4.5276bd2.20261102`.
 
 - `1`: major application version.
-- `feature`: feature release number; the four-family-plan release is feature 4.
+- `feature`: feature release number; the four-family-plan release is feature 4, and shared family login is feature 5.
 - `commit`: first seven characters of the deployed Git commit SHA.
 - `Date`: build date in `YYYYMMDD`, using Vietnam time (`Asia/Ho_Chi_Minh`).
 
-The package’s normal npm version is `1.4.0`; the build derives major/feature from its first two components. Increase the feature number for a new feature release. Each build automatically stamps the commit and date into generated `public/version.js`. Workers Builds supplies `WORKERS_CI_COMMIT_SHA`; GitHub Actions and local Git checkouts are fallbacks. Source without Git metadata uses `dev` rather than an invented hash. The full version appears in the header and footer, including on phones via the footer. `npm run dev` and `npm run deploy` generate the stamp through their pre-hooks; Cloudflare’s configured `npm run build` generates it before deployment.
+The package’s normal npm version is now `1.5.0`; the build derives major/feature from its first two components. Increase the feature number for a new feature release. Each build automatically stamps the commit and date into generated `public/version.js`. Workers Builds supplies `WORKERS_CI_COMMIT_SHA`; GitHub Actions and local Git checkouts are fallbacks. Source without Git metadata uses `dev` rather than an invented hash. The full version appears in the header and footer, including on phones via the footer. `npm run dev` and `npm run deploy` generate the stamp through their pre-hooks; Cloudflare’s configured `npm run build` generates it before deployment.
 
 This display version is independent of the existing learner-data/backup schema.
 
