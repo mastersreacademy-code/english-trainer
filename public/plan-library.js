@@ -1,3 +1,4 @@
+import {translate} from './i18n.js';
 // Original general-English starter units. Class labels are practice guidance, not textbook alignment.
 const rows = text => text.trim().split('\n').map((line,index)=>{
  const [title,word,meaning,script,question,answer,wrong1,wrong2]=line.split('|');
@@ -155,7 +156,7 @@ export const plans=[
  ].map(([id,name,description])=>({id,name,description,group:'careers',level:'intermediate',focus:'Professional communication',scene:'work',icon:'briefcase'}))
 ];
 export const planFor=id=>plans.find(p=>p.id===id);
-export function filterPlans({group='all',level='all',query=''}={}){const q=query.trim().toLowerCase();return plans.filter(p=>(group==='all'||p.group===group)&&(level==='all'||p.level===level)&&(!q||`${p.name} ${p.description} ${p.focus}`.toLowerCase().includes(q)))}
+export function filterPlans({group='all',level='all',query=''}={}){const fold=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');const q=fold(query.trim());return plans.filter(p=>(group==='all'||p.group===group)&&(level==='all'||p.level===level)&&(!q||fold(`${p.name} ${p.description} ${p.focus} ${translate(p.name,'vi')} ${translate(p.description,'vi')} ${translate(p.focus,'vi')}`).includes(q)))}
 
 const skillTasks={
 vocabulary:[['Hide the meaning. Say a phrase with “make an effort”, then use it in a different situation.','Write two things you make an effort to do.'],['Describe a reliable person and give one example of their behaviour.','Write a sentence about a reliable person and explain why you chose that adjective.'],['Say one sentence with “improve” and another with “improvement”.','Write two connected sentences using both improve and improvement.'],['Name three situations when you take a break.','Write a short routine using take a break.'],['Explain how you guessed the meaning of icy from context.','Write an example with enough context for a reader to guess the meaning of an unfamiliar word.'],['Correct a mistaken idea politely using actually.','Write two lines: an assumption, then a correction beginning Actually.'],['Cover today’s example and recall it. Then create a new example.','Recall three words from this unit without looking, then use them in a short paragraph.']],

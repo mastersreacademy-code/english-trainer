@@ -125,3 +125,12 @@ The four saved learner profiles are shortcuts, not fixed curricula. Every learne
 There are 203 distinct guided sessions: the five original 14-session paths and nineteen new 7-session starter units. These are complete starter units, not full academic-year courses. Listening uses device text-to-speech; pronunciation is self-practice with optional local recording, with no automated scoring. Suggested foundations/extension bands are guidance, not CEFR certification. Skill tracks include task-specific speaking and writing prompts.
 
 `planProgress` records a learner’s completed daily sessions for each plan. Old backups without this field migrate their completion count to the formerly active plan. Switching retains all plan positions, vocabulary, writing, and daily history. One daily completion per learner/date remains the rule. Any lesson can be opened for extra practice without advancing the daily plan. Backups keep the existing family-v4 schema with the additional per-plan counts; new backups require this version or later to restore the expanded paths.
+
+
+## Feature 7: personal workspace, Vietnamese and varied artwork
+
+The app now has one personal workspace. The fixed four-profile switcher and family dashboard are removed. First load migrates the previously active profile into `english-trainer-workspace-v7`; the old family-v4 data is never overwritten or deleted. Preferences can export the previous profiles and restore a selected old profile from a family backup. A current personal backup uses `format: english-trainer-workspace`, `version: 7`, and includes the normalised state and per-plan progress. Existing login credentials and server sessions remain valid.
+
+English / Tiếng Việt controls are available on login and every app page. The browser remembers the choice and synchronises it between tabs. Vietnamese covers interface labels, plan descriptions, instructions, account messages and skill tasks. Search accepts Vietnamese, including queries without accents. English passages, answer options, pronunciation examples and user writing stay in English and are marked separately from interface translations. Changing language updates the existing DOM, preserving lesson choices, timers, inputs and drafts.
+
+Plan cards use dedicated, compressed WebP illustrations. Repeated thumbnail photos in lesson lists are replaced with activity icons. Generated cover source prompts and asset locations are documented in `docs/plan-artwork.md`.
