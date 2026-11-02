@@ -16,3 +16,12 @@ export const learnerProfilesApi={
  async get(){const response=await fetch('/api/learners',{credentials:'same-origin',cache:'no-store'});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not load learner profiles.');error.status=response.status;throw error}return result},
  async put(revision,profiles){const response=await fetch('/api/learners',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':current?.csrf||''},body:JSON.stringify({accountId:current?.accountId,revision,profiles})});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not save learner profiles.');error.status=response.status;throw error}return result}
 };
+
+// Child progress is isolated by both parent account and validated learner ID.
+export function learnerWorkspaceApi(learnerId){
+ if(typeof learnerId!=='string'||!/^[a-zA-Z0-9_-]{8,64}$/.test(learnerId))throw Error('Invalid learner ID');
+ return {
+  async get(){const response=await fetch('/api/learner-workspace?learnerId='+encodeURIComponent(learnerId),{credentials:'same-origin',cache:'no-store'});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not load learner progress.');error.status=response.status;throw error}return result},
+  async put(revision,state){const response=await fetch('/api/learner-workspace',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':current?.csrf||''},body:JSON.stringify({accountId:current?.accountId,learnerId,revision,state})});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not save learner progress.');error.status=response.status;throw error}return result}
+ };
+}
