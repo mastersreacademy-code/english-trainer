@@ -24,7 +24,7 @@ if(activated.status!==200)throw Error('Runtime activation failed: '+activated.st
 const cookie=activated.headers.get('set-cookie').split(';')[0];
 const session=await(await call('/api/auth/session',undefined,cookie)).json();
 assert.equal(session.username,'runtime-family');assert.ok(session.csrf);
-const app=await call('/',undefined,cookie);assert.equal(app.status,200);assert.match(await app.text(),/English Trainer/);
+const app=await call('/',undefined,cookie);assert.equal(app.status,200);assert.match(await app.text(),/Family Learning/);
 assert.equal((await call('/app.js',undefined,cookie)).status,200);
 assert.equal((await call('/api/auth/setup',{token,username:'other',password})).status,409);
 assert.equal((await call('/api/auth/logout',{},cookie,session.csrf)).status,200);
