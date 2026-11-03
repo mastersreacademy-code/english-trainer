@@ -46,3 +46,11 @@
 
 /* Parent-managed family profile overview */
 .family-list{display:grid;gap:12px;margin:18px 0 26px}.family-learner{display:flex;justify-content:space-between;align-items:center;gap:16px;border:1px solid var(--border);background:var(--panel-alt);border-radius:14px;padding:15px}.family-learner p{margin:5px 0 0}.family-learner .actions{margin:0;display:flex;gap:8px;flex-wrap:wrap}.family-learner button{font-size:12px;padding:9px 12px}@media(max-width:600px){.family-learner{align-items:flex-start;flex-direction:column}}
+
+/* Family profile form: keep the submit action separate from the grade picker. */
+#family-content #add-learner{display:grid;grid-template-columns:minmax(0,1fr);gap:0;max-width:100%;}
+#family-content #add-learner label{margin:18px 0 9px;line-height:1.4;}
+#family-content #add-learner input,
+#family-content #add-learner select{display:block;box-sizing:border-box;width:100%;min-width:0;min-height:48px;margin:0;}
+#family-content #add-learner button[type=submit]{justify-self:start;width:auto;max-width:100%;margin-top:22px;min-height:44px;}
+#family-content #family-error:not(:empty){margin-top:12px;}
