@@ -6,6 +6,7 @@ import {requireSession,signOut,changePassword,workspaceApi,learnerProfilesApi,le
 import {buildInfo} from './version.js';
 import {familyKey,isChild} from './family.js';
 import {addLearner,chooseLearner,deleteLearner} from './learner-profiles.js';
+import {subjects} from './subjects.js';
 import {initAppearance} from './appearance.js';
 import {goalDetails,icon,scene} from './visuals.js';
 import {topics,vocabularyFor,dateKey,lesson,listening,planCount,nextLesson,lessonPrompts} from './learning.js';
@@ -116,7 +117,7 @@ async function familyDashboard(){
   if(record.accountId!==familyAccount.accountId)throw Error('Account mismatch');
   function draw(){
    const profiles=record.profiles;
-   container.innerHTML='<h2>Your learners</h2><p class="small">Only English is available now. Mathematics and Vietnamese are planned.</p>'+
+   container.innerHTML='<h2>Your learners</h2><h3>School subjects · Môn học</h3><div class="family-list">'+subjects.map(subject=>'<div class="family-learner"><div><strong>'+esc(subject.nameVi)+' / '+esc(subject.name)+'</strong><p class="small">Lớp 1–12 · Classes 1–12</p></div><span class="small">'+(subject.available?'Available · Đang học':'Coming soon · Sắp ra mắt')+'</span></div>').join('')+'</div><p class="small">Toán và Tiếng Việt đang chuẩn bị nội dung; chưa thể bắt đầu học hai môn này.</p>'+
     (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
     '<h3>Add a child</h3><form id="add-learner"><label for="learner-nickname">Nickname</label><input id="learner-nickname" name="nickname" maxlength="40" required autocomplete="off"><label for="learner-grade">Class level</label><select id="learner-grade" name="grade">'+Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'">Class '+(i+1)+'</option>').join('')+'</select><button type="submit">Add learner</button></form><p id="family-error" role="status" aria-live="polite"></p>';
    async function persist(next){const result=await learnerProfilesApi.put(record.revision,next);if(result.accountId!==familyAccount.accountId)throw Error('Account mismatch');record={...record,revision:result.revision,profiles:next};draw();notify('Family profiles saved.')}
