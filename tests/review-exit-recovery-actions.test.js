@@ -13,7 +13,7 @@ test('blocked exit displays retry and backup actions without discarding a review
  assert.match(source,/Export review backup/);
  assert.match(source,/await accountStore\.retry\(\)/);
  assert.match(source,/await ensureLearnerCanExit\(\)/);
- assert.match(source,/localStorage\.getItem\(key\)/);
+ assert.match(source,/exportScopedReviewDraft\(localStorage,familyAccount\.accountId,currentLearner\.id\)/);
  assert.match(source,/app\.before\(panel\)/);
  assert.doesNotMatch(source,/localStorage\.removeItem/);
 });
