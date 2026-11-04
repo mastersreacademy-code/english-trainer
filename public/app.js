@@ -52,8 +52,9 @@ function todaysReview(){
  if(currentLearner){
   const key=reviewDraftKey(familyAccount.accountId,currentLearner.id);
   const status=reviewDraftStatus(localStorage,key,state).status;
-  if(status==='conflict'||status==='invalid'){
-   app.innerHTML=header()+'<section class="card" role="alert"><h1>Review recovery needs attention</h1><p>A previous review on this device needs to be resolved before starting another review. Return to the family profiles and reopen this learner to compare the online and local copies.</p><a class="button" href="#family">Review recovery options</a></section>';
+  if(status==='saved')clearReviewDraft(localStorage,key);
+  if(status==='recover'||status==='conflict'||status==='invalid'){
+   app.innerHTML=header()+'<section class="card" role="alert"><h1>Review recovery needs attention</h1><p>A previous review on this device is not fully resolved. Return to the family profiles and reopen this learner to recover or compare the saved results.</p><a class="button" href="#family">Review recovery options</a></section>';
    return;
   }
  }
