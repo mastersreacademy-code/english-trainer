@@ -160,7 +160,10 @@ async function openLearnerWorkspace(learner){
   try{await next.flush();clearReviewDraft(localStorage,draftKey);notify('Your previous review result was recovered and saved.')}catch{notify('Review result recovered locally. Retry saving when online.')}
  }
  if(recovery.status==='conflict'||recovery.status==='invalid')notify('A previous review draft needs attention. No remote progress was overwritten.');
- if(next.state.profile.name!==learner.nickname){next.state.profile.name=learner.nickname;next.queue(next.state);await next.flush()}
+ if(next.state.profile.name!==learner.nickname){
+  next.state.profile.name=learner.nickname;next.queue(next.state);
+  try{await next.retry()}catch{notify('Learning progress is waiting to sync. Please reconnect before leaving this learner.')}
+ }
  accountStore=next;state=next.state;currentLearner=learner;
  sessionStorage.setItem(activeLearnerSessionKey,learner.id);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
