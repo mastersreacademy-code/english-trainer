@@ -1,4 +1,5 @@
 import {dailyReview} from './daily-review.js';
+import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft} from './review-draft.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
 import {initLanguage,languageControl,locale,translate,applyLanguage} from './i18n.js';
@@ -68,6 +69,11 @@ function todaysReview(){
    const next=structuredClone(state);
    next.reviewHistory=[...(next.reviewHistory||[]),{date:review.date,grade,total:result.total,correct:result.correct}].slice(-120);
    result.results.forEach(answer=>{const word=next.words.find(item=>item.word.trim().toLowerCase()===answer.id);if(!word)return;const days=reviewDays(word,answer.correct?'easy':'hard');const due=new Date();due.setDate(due.getDate()+days);word.due=dateKey(due);word.interval=days});
+   let draftKey=null;
+   if(currentLearner){
+    try{draftKey=reviewDraftKey(familyAccount.accountId,currentLearner.id);saveReviewDraft(localStorage,draftKey,before,next)}
+    catch{ $('#review-save-status').textContent='Could not save a recovery copy. Check browser storage and try again.';saving=false;return }
+   }
    state=next;
    if(!save()){state=before;$('#review-save-status').textContent='Could not queue your results. Please retry the review.';saving=false;return}
    const store=accountStore;
@@ -77,7 +83,7 @@ function todaysReview(){
    async function syncReview(){
     if(status)status.textContent='Saving your results…';
     try{
-     await store.retry();finished=true;
+     await store.retry();if(draftKey)clearReviewDraft(localStorage,draftKey);finished=true;
      if(status)status.textContent='Results saved to this learner’s private workspace.';
      if(back)back.removeAttribute('aria-disabled');
      app.querySelector('#review-retry')?.remove();
@@ -145,7 +151,19 @@ async function openLearnerWorkspace(learner){
  const remote=await api.get();
  if(remote.accountId!==familyAccount.accountId||remote.learnerId!==learner.id)throw Error('Learner account mismatch');
  const next=await openAccountWorkspace({accountId:familyAccount.accountId,username:learner.nickname,legacy:false},api,updateSync);
- if(next.state.profile.name!==learner.nickname){next.state.profile.name=learner.nickname;next.queue(next.state);await next.flush()}
+ const draftKey=reviewDraftKey(familyAccount.accountId,learner.id);
+ const recovery=reviewDraftStatus(localStorage,draftKey,next.state);
+ if(recovery.status==='saved')clearReviewDraft(localStorage,draftKey);
+ if(recovery.status==='recover'){
+  next.state=recovery.state;
+  next.queue(recovery.state);
+  try{await next.flush();clearReviewDraft(localStorage,draftKey);notify('Your previous review result was recovered and saved.')}catch{notify('Review result recovered locally. Retry saving when online.')}
+ }
+ if(recovery.status==='conflict'||recovery.status==='invalid')notify('A previous review draft needs attention. No remote progress was overwritten.');
+ if(next.state.profile.name!==learner.nickname){
+  next.state.profile.name=learner.nickname;next.queue(next.state);
+  try{await next.retry()}catch{notify('Learning progress is waiting to sync. Please reconnect before leaving this learner.')}
+ }
  accountStore=next;state=next.state;currentLearner=learner;
  sessionStorage.setItem(activeLearnerSessionKey,learner.id);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
