@@ -181,6 +181,7 @@ async function openLearnerWorkspace(learner){
   try{await next.retry()}catch{notify('Learning progress is waiting to sync. Please reconnect before leaving this learner.')}
  }
  document.querySelector('#review-recovery-notice')?.remove();
+ document.querySelector('#learner-exit-recovery')?.remove();
  accountStore=next;state=next.state;currentLearner=learner;
  sessionStorage.setItem(activeLearnerSessionKey,learner.id);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
@@ -219,6 +220,27 @@ async function openLearnerWorkspace(learner){
   app.before(panel);
  }
 }
+function showLearnerExitRecovery(error){
+ document.querySelector('#learner-exit-recovery')?.remove();
+ if(!currentLearner)return notify(error.message);
+ const panel=document.createElement('section');panel.id='learner-exit-recovery';panel.className='card';panel.setAttribute('role','alert');
+ panel.style.cssText='border:2px solid var(--accent,#64748b);margin:16px 0;padding:16px';
+ const heading=document.createElement('h2');heading.textContent='Review not yet safely saved';
+ const detail=document.createElement('p');detail.textContent=error.message||'Unable to verify saved progress. Stay on this learner until the review is resolved.';
+ const actions=document.createElement('div');actions.className='actions';
+ const retry=document.createElement('button');retry.type='button';retry.textContent='Retry sync';
+ retry.onclick=async()=>{retry.disabled=true;detail.textContent='Checking saved progress…';try{await accountStore.retry();await ensureLearnerCanExit();panel.remove();notify('Review safely saved. You can now switch profiles or sign out.')}catch(reason){detail.textContent=reason.message||'Unable to sync. Keep your local draft and try again.';retry.disabled=false}};
+ const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Export review backup';
+ exportButton.onclick=()=>{
+  const key=reviewDraftKey(familyAccount.accountId,currentLearner.id);
+  const raw=localStorage.getItem(key);
+  if(!raw){detail.textContent='No local review draft is available to export. Your online data has not been changed.';return}
+  const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='family-learning-review-'+currentLearner.id+'.json';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ };
+ actions.append(retry,exportButton);panel.append(heading,detail,actions);app.before(panel);
+}
 async function ensureLearnerCanExit(){
  if(!currentLearner)return;
  await accountStore.flush();
@@ -231,6 +253,7 @@ async function returnToParentWorkspace(){
  await ensureLearnerCanExit();
  stopMedia();clearSession();
  document.querySelector('#review-recovery-notice')?.remove();
+ document.querySelector('#learner-exit-recovery')?.remove();
  accountStore=parentStore;state=parentState;currentLearner=null;
  sessionStorage.removeItem(activeLearnerSessionKey);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId;
@@ -281,9 +304,9 @@ async function familyDashboard(){
   draw();
  }catch(error){container.innerHTML='<p>Could not load family profiles. Your existing learning data is safe.</p><p class="small">'+esc(error.message)+'</p><button id="family-retry">Try again</button>';on('#family-retry',familyDashboard)}
 }
-function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';if(currentLearner&&page==='family'){app.innerHTML=header()+'<h1>Learning as '+esc(currentLearner.nickname)+'</h1><p>Save this learner’s progress before returning to the parent account.</p><button id="return-to-parent">Return to family profiles</button><p id="return-error" role="status"></p>';on('#return-to-parent',async()=>{const button=$('#return-to-parent');button.disabled=true;try{await returnToParentWorkspace()}catch(error){$('#return-error').textContent=error.message;button.disabled=false}});return}document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(page==='family'){familyDashboard();window.scrollTo(0,0);return}if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,'daily-review':todaysReview,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
+function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';if(currentLearner&&page==='family'){app.innerHTML=header()+'<h1>Learning as '+esc(currentLearner.nickname)+'</h1><p>Save this learner’s progress before returning to the parent account.</p><button id="return-to-parent">Return to family profiles</button><p id="return-error" role="status"></p>';on('#return-to-parent',async()=>{const button=$('#return-to-parent');button.disabled=true;try{await returnToParentWorkspace()}catch(error){$('#return-error').textContent=error.message;showLearnerExitRecovery(error);button.disabled=false}});return}document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(page==='family'){familyDashboard();window.scrollTo(0,0);return}if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,'daily-review':todaysReview,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
 
-document.addEventListener('click',async e=>{if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{if(currentLearner)await ensureLearnerCanExit();else await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){notify(error.message);button.disabled=false}return}});
+document.addEventListener('click',async e=>{if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{if(currentLearner)await ensureLearnerCanExit();else await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){showLearnerExitRecovery(error);button.disabled=false}return}});
 document.querySelector('.skip-link')?.addEventListener('click',e=>{e.preventDefault();app.focus()});
 document.querySelectorAll('[data-nav-icon]').forEach(el=>el.innerHTML=icon(el.dataset.navIcon));
 document.querySelector('#release-version').textContent='Version '+buildInfo.version;
