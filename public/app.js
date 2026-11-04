@@ -70,7 +70,25 @@ function todaysReview(){
    result.results.forEach(answer=>{const word=next.words.find(item=>item.word.trim().toLowerCase()===answer.id);if(!word)return;const days=reviewDays(word,answer.correct?'easy':'hard');const due=new Date();due.setDate(due.getDate()+days);word.due=dateKey(due);word.interval=days});
    state=next;
    if(!save()){state=before;$('#review-save-status').textContent='Could not queue your results. Please retry the review.';saving=false;return}
-   accountStore.flush().then(()=>{finished=true;$('#review-save-status')&&($('#review-save-status').textContent='Results saved to this learner’s private workspace.')}).catch(()=>{$('#review-save-status')&&($('#review-save-status').textContent='Could not sync results. Please check your connection before leaving.');saving=false});
+   const store=accountStore;
+   const status=$('#review-save-status');
+   const back=app.querySelector('a[href="#today"]');
+   if(back){back.setAttribute('aria-disabled','true');back.addEventListener('click',event=>{if(!finished)event.preventDefault()})}
+   async function syncReview(){
+    if(status)status.textContent='Saving your results…';
+    try{
+     await store.retry();finished=true;
+     if(status)status.textContent='Results saved to this learner’s private workspace.';
+     if(back)back.removeAttribute('aria-disabled');
+     app.querySelector('#review-retry')?.remove();
+    }catch{
+     if(status)status.textContent='Not saved to the server. Keep this page open and retry when connected.';
+     let retry=app.querySelector('#review-retry');
+     if(!retry){retry=document.createElement('button');retry.id='review-retry';retry.textContent='Retry saving';status?.after(retry)}
+     retry.disabled=false;retry.onclick=()=>{retry.disabled=true;syncReview()};
+    }
+   }
+   syncReview();
   }
  }
  draw();
