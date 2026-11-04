@@ -45,17 +45,33 @@ function library(){app.innerHTML=header()+`<div class="page-banner"><div><span c
 function results(){const list=filterPlans(libraryFilters).filter(p=>!libraryFilters.saved||state.savedPlans.includes(p.id));$('#plan-result-count').textContent=list.length+(list.length===1?' plan found':' plans found')+' · your progress is saved separately for each plan';$('#plan-results').innerHTML=list.length?list.map(p=>{const count=state.planProgress[p.id]||0,current=p.id===state.profile.goal;return `<article class="card library-card"><div class="library-art">${scene(p.id,'topic-scene',true)}<span class="pill">${p.grade?'CLASS '+p.grade:p.group==='careers'?'CAREER PATH':p.group==='skills'?'SKILL FOCUS':'EVERYDAY'}</span></div><div class="library-card-body"><span class="eyebrow">${p.level==='beginner'?'FOUNDATIONS':'DEVELOPING & EXTENDING'}</span><h2>${esc(p.name)}</h2><p>${esc(p.description)}</p><p class="small">${topics[p.id].length} sessions · ${count} completed across cycles</p><details><summary>Preview lessons & outcomes</summary><p class="small">${esc(p.focus)}</p><ol>${topics[p.id].map(t=>`<li data-learning-content lang="en">${esc(t)}</li>`).join('')}</ol><blockquote data-learning-content lang="en">${esc(listening(p.id,0).script)}</blockquote></details><div class="library-card-actions"><button data-select-plan="${p.id}" class="${current?'secondary':''}">${current?'Continue this plan':count?'Resume this plan':'Choose this plan'} ${icon('arrow')}</button><button class="secondary" data-save-plan="${p.id}" aria-pressed="${state.savedPlans.includes(p.id)}">${state.savedPlans.includes(p.id)?'✓ Saved plan':'Save plan'}</button></div></div></article>`}).join(''):`<section class="card"><h2>${libraryFilters.saved?'No saved plans yet.':'No matching paths yet.'}</h2><p>${libraryFilters.saved?'Choose Save plan on any path to keep it in your private list.':'Try a broader search or select All plans.'}</p><button id="reset-plans" class="secondary">Reset filters</button></section>`;document.querySelectorAll('[data-select-plan]').forEach(b=>b.onclick=()=>choosePlan(b.dataset.selectPlan));document.querySelectorAll('[data-save-plan]').forEach(b=>b.onclick=()=>{const id=b.dataset.savePlan;state.savedPlans=state.savedPlans.includes(id)?state.savedPlans.filter(p=>p!==id):[...state.savedPlans,id];save();results()});on('#reset-plans',()=>{libraryFilters={group:'all',level:'all',query:'',saved:false};library()})}
 on('[data-saved-plans]',()=>{libraryFilters.saved=!libraryFilters.saved;document.querySelector('[data-saved-plans]').setAttribute('aria-pressed',String(libraryFilters.saved));results()});$('#plan-search').oninput=e=>{libraryFilters.query=e.target.value;results()};$('#plan-level').onchange=e=>{libraryFilters.level=e.target.value;results()};document.querySelectorAll('[data-group]').forEach(b=>b.onclick=()=>{libraryFilters.group=b.dataset.group;document.querySelectorAll('[data-group]').forEach(t=>t.setAttribute('aria-pressed',String(t===b)));results()});results();}
 function todaysReview(){
+ if(!currentLearner&&!isChild(state.profile.goal)){go('today');return}
  const grade=currentLearner?.grade || Number(state.profile.goal.match(/^grade(\\d+)$/)?.[1]) || 1;
  const review=dailyReview(state,grade);
  const questions=buildReviewQuestions(review,state.words.filter(w=>w.due>dateKey()));
- let position=0,answers=[];
+ let position=0,answers=[],saving=false,finished=false;
+ const history=state.reviewHistory||[];
  function draw(){
   const q=questions[position];
+  const previous=history.filter(item=>item.date===review.date&&item.grade===grade);
   app.innerHTML=header()+'<div class="page-banner"><div><span class="eyebrow">DAILY VOCABULARY</span><h1>Today’s Review</h1><p>Small steps, every day.</p></div></div>'+
+   (previous.length?'<p class="small">Completed today: '+previous.length+' review(s). Latest score: '+previous.at(-1).correct+'/'+previous.at(-1).total+'.</p>':'')+
    (!questions.length?'<section class="card"><h2>No vocabulary questions due yet.</h2><p>Save more words and return when they are ready to review.</p><a class="button" href="#words">My vocabulary</a></section>':
-   position===questions.length?(()=>{const result=scoreReview(questions,answers);return '<section class="card"><h2>Review complete!</h2><p>'+result.correct+' of '+result.total+' correct</p><p class="small">This is a practice preview. Results are not yet saved to your learning history.</p><a class="button" href="#today">Back to Today</a></section>'})():
+   position===questions.length?'<section class="card"><h2>Review complete!</h2><p id="review-score"></p><p id="review-save-status" role="status">Saving your results…</p><a class="button" href="#today">Back to Today</a></section>':
    '<section class="card"><span class="eyebrow">QUESTION '+(position+1)+' OF '+questions.length+'</span><h2>'+esc(q.word)+'</h2><p>Choose the correct meaning.</p>'+q.options.map((option,i)=>'<button class="choice" data-review-answer="'+i+'">'+esc(option)+'</button>').join('')+'</section>');
   document.querySelectorAll('[data-review-answer]').forEach(button=>button.onclick=()=>{answers.push(Number(button.dataset.reviewAnswer));position++;draw()});
+  if(position===questions.length&&!finished&&!saving&&questions.length){
+   saving=true;
+   const result=scoreReview(questions,answers);
+   $('#review-score').textContent=result.correct+' of '+result.total+' correct';
+   const before=state;
+   const next=structuredClone(state);
+   next.reviewHistory=[...(next.reviewHistory||[]),{date:review.date,grade,total:result.total,correct:result.correct}].slice(-120);
+   result.results.forEach(answer=>{const word=next.words.find(item=>item.word.trim().toLowerCase()===answer.id);if(!word)return;const days=reviewDays(word,answer.correct?'easy':'hard');const due=new Date();due.setDate(due.getDate()+days);word.due=dateKey(due);word.interval=days});
+   state=next;
+   if(!save()){state=before;$('#review-save-status').textContent='Could not queue your results. Please retry the review.';saving=false;return}
+   accountStore.flush().then(()=>{finished=true;$('#review-save-status')&&($('#review-save-status').textContent='Results saved to this learner’s private workspace.')}).catch(()=>{$('#review-save-status')&&($('#review-save-status').textContent='Could not sync results. Please check your connection before leaving.');saving=false});
+  }
  }
  draw();
 }
