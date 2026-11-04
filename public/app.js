@@ -49,6 +49,15 @@ function results(){const list=filterPlans(libraryFilters).filter(p=>!libraryFilt
 on('[data-saved-plans]',()=>{libraryFilters.saved=!libraryFilters.saved;document.querySelector('[data-saved-plans]').setAttribute('aria-pressed',String(libraryFilters.saved));results()});$('#plan-search').oninput=e=>{libraryFilters.query=e.target.value;results()};$('#plan-level').onchange=e=>{libraryFilters.level=e.target.value;results()};document.querySelectorAll('[data-group]').forEach(b=>b.onclick=()=>{libraryFilters.group=b.dataset.group;document.querySelectorAll('[data-group]').forEach(t=>t.setAttribute('aria-pressed',String(t===b)));results()});results();}
 function todaysReview(){
  if(!currentLearner&&!isChild(state.profile.goal)){go('today');return}
+ if(currentLearner){
+  const key=reviewDraftKey(familyAccount.accountId,currentLearner.id);
+  const status=reviewDraftStatus(localStorage,key,state).status;
+  if(status==='conflict'||status==='invalid'){
+   app.innerHTML=header()+'<section class="card" role="alert"><h1>Review recovery needs attention</h1><p>A previous review on this device needs to be resolved before starting another review. Return to the family profiles and reopen this learner to compare the online and local copies.</p><a class="button" href="#family">Review recovery options</a></section>';
+   return;
+  }
+ }
+
  const grade=currentLearner?.grade || Number(state.profile.goal.match(/^grade(\d+)$/)?.[1]) || 1;
  const review=dailyReview(state,grade);
  const questions=buildReviewQuestions(review,state.words.filter(w=>w.due>dateKey()));
