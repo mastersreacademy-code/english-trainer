@@ -20,3 +20,21 @@ export function reviewDraftStatus(storage,key,remote){
  }catch{return {status:'invalid'}}
 }
 export function clearReviewDraft(storage,key){storage.removeItem(key)}
+
+export function reviewDraftComparison(storage,key,remote){
+ const status=reviewDraftStatus(storage,key,remote);
+ if(status.status==='none'||status.status==='invalid')return {status:status.status};
+ try{
+  const draft=JSON.parse(storage.getItem(key));
+  const local=normalizeWorkspace(draft.after),online=normalizeWorkspace(remote);
+  const last=state=>state.reviewHistory.at(-1)||null;
+  return {status:status.status,local:last(local),online:last(online),localCount:local.reviewHistory.length,onlineCount:online.reviewHistory.length};
+ }catch{return {status:'invalid'}}
+}
+export function chooseReviewDraft(storage,key,choice,remote){
+ if(choice==='online'){clearReviewDraft(storage,key);return {status:'online'};}
+ if(choice!=='local')throw Error('Invalid review recovery choice');
+ const status=reviewDraftStatus(storage,key,remote);
+ if(status.status!=='recover')return {status:'conflict'};
+ return {status:'recover',state:status.state};
+}
