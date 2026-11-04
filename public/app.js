@@ -1,5 +1,5 @@
 import {dailyReview} from './daily-review.js';
-import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft} from './review-draft.js';
+import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft,reviewDraftComparison,chooseReviewDraft} from './review-draft.js';
 import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
@@ -181,8 +181,22 @@ async function openLearnerWorkspace(learner){
    const retry=document.createElement('button');retry.textContent='Retry saving review';panel.append(retry);
    retry.onclick=async()=>{retry.disabled=true;detail.textContent='Syncing…';try{await next.retry();clearReviewDraft(localStorage,draftKey);panel.remove();notify('Recovered review saved online.')}catch{detail.textContent='Still offline or unable to save. The draft is retained on this device.';retry.disabled=false}};
   }
-  if(recovery.status==='conflict'||recovery.status==='invalid'){
-   const note=document.createElement('p');note.className='small';note.textContent='Keep this draft until you can resolve the difference. It will not be uploaded automatically.';panel.append(note);
+  if(recovery.status==='conflict'){
+   const comparison=reviewDraftComparison(localStorage,draftKey,next.state);
+   const score=entry=>entry?entry.correct+'/'+entry.total+' correct on '+entry.date:'No completed review';
+   const online=document.createElement('p');online.textContent='Online: '+score(comparison.online)+' ('+comparison.onlineCount+' reviews)';
+   const local=document.createElement('p');local.textContent='Saved on this device: '+score(comparison.local)+' ('+comparison.localCount+' reviews)';
+   panel.append(online,local);
+   const keep=document.createElement('button');keep.textContent='Keep local copy';keep.type='button';
+   keep.onclick=()=>{detail.textContent='Local copy retained on this device. Online progress stays unchanged. You can export the draft for safekeeping.'};
+   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Export local draft';
+   exportButton.onclick=()=>{const raw=localStorage.getItem(draftKey);if(!raw)return;const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='family-learning-review-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+   const useOnline=document.createElement('button');useOnline.type='button';useOnline.textContent='Use online progress (discard local draft)';
+   useOnline.onclick=()=>{if(!confirm('Discard the unsynced local review? This cannot be undone.'))return;chooseReviewDraft(localStorage,draftKey,'online',next.state);panel.remove();notify('Online progress kept; local review draft discarded.')};
+   panel.append(keep,exportButton,useOnline);
+  }
+  if(recovery.status==='invalid'){
+   const note=document.createElement('p');note.className='small';note.textContent='This draft cannot be compared safely. Keep it until you have a backup.';panel.append(note);
   }
   app.querySelector('.top')?.after(panel);
  }
