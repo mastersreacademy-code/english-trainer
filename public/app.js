@@ -135,8 +135,24 @@ async function familyDashboard(){
   function draw(){
    const profiles=record.profiles;
    container.innerHTML='<h2>Your learners</h2><h3>School subjects · Môn học</h3><div class="family-list">'+subjects.map(subject=>'<div class="family-learner"><div><strong>'+esc(subject.nameVi)+' / '+esc(subject.name)+'</strong><p class="small">Lớp 1–12 · Classes 1–12</p></div><span class="small">'+(subject.available?'Available · Đang học':'Coming soon · Sắp ra mắt')+'</span></div>').join('')+'</div><p class="small">Toán và Tiếng Việt đang chuẩn bị nội dung; chưa thể bắt đầu học hai môn này.</p>'+
-    (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
+    (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p><p class="small" data-review-summary="'+esc(item.id)+'">Loading review progress…</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
     '<h3>Add a child</h3><form id="add-learner"><label for="learner-nickname">Nickname</label><input id="learner-nickname" name="nickname" maxlength="40" required autocomplete="off"><label for="learner-grade">Class level</label><select id="learner-grade" name="grade">'+Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'">Class '+(i+1)+'</option>').join('')+'</select><button type="submit">Add learner</button></form><p id="family-error" role="status" aria-live="polite"></p>';
+   // Parent-only read of each child's existing authenticated workspace.
+   // Never copy scores into the parent's workspace or mix learner IDs.
+   for(const learner of profiles.learners){
+    const slot=container.querySelector('[data-review-summary="'+learner.id+'"]');
+    if(!slot)continue;
+    learnerWorkspaceApi(learner.id).get().then(record=>{
+     if(!slot.isConnected)return;
+     if(record.accountId!==familyAccount.accountId||record.learnerId!==learner.id)throw Error('Learner mismatch');
+     const history=Array.isArray(record.state?.reviewHistory)?record.state.reviewHistory:[];
+     const valid=history.filter(item=>item&&Number.isInteger(item.total)&&item.total>0&&Number.isInteger(item.correct)&&item.correct>=0&&item.correct<=item.total&&typeof item.date==='string');
+     if(!valid.length){slot.textContent='Today’s Review: no saved scores yet';return}
+     const latest=valid.at(-1);
+     const lastSeven=valid.filter(item=>{const age=Date.parse(dateKey()+'T00:00:00')-Date.parse(item.date+'T00:00:00');return age>=0&&age<7*86400000});
+     slot.textContent='Latest review: '+latest.correct+'/'+latest.total+' ('+latest.date+') · Last 7 days: '+lastSeven.length+' review(s)';
+    }).catch(()=>{if(slot.isConnected)slot.textContent='Review progress unavailable — try reloading'});
+   }
    async function persist(next){const result=await learnerProfilesApi.put(record.revision,next);if(result.accountId!==familyAccount.accountId)throw Error('Account mismatch');record={...record,revision:result.revision,profiles:next};draw();notify('Family profiles saved.')}
    container.querySelector('#add-learner').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{const id=crypto.randomUUID().replaceAll('-','');await persist(addLearner(record.profiles,{nickname:form.elements.nickname.value,grade:Number(form.elements.grade.value),subjects:['english']},id))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}};
    container.querySelectorAll('[data-select-learner]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await persist(chooseLearner(record.profiles,button.dataset.selectLearner))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
