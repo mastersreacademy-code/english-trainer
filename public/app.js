@@ -178,6 +178,7 @@ async function openLearnerWorkspace(learner){
   next.state.profile.name=learner.nickname;next.queue(next.state);
   try{await next.retry()}catch{notify('Learning progress is waiting to sync. Please reconnect before leaving this learner.')}
  }
+ document.querySelector('#review-recovery-notice')?.remove();
  accountStore=next;state=next.state;currentLearner=learner;
  sessionStorage.setItem(activeLearnerSessionKey,learner.id);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
@@ -213,13 +214,14 @@ async function openLearnerWorkspace(learner){
   if(recovery.status==='invalid'){
    const note=document.createElement('p');note.className='small';note.textContent='This draft cannot be compared safely. Keep it until you have a backup.';panel.append(note);
   }
-  app.querySelector('.top')?.after(panel);
+  app.before(panel);
  }
 }
 async function returnToParentWorkspace(){
  if(!currentLearner)return;
  await accountStore.flush();
  stopMedia();clearSession();
+ document.querySelector('#review-recovery-notice')?.remove();
  accountStore=parentStore;state=parentState;currentLearner=null;
  sessionStorage.removeItem(activeLearnerSessionKey);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId;
@@ -284,10 +286,15 @@ async function restoreLearnerAfterReload(){
   const record=await learnerProfilesApi.get();
   const savedLearnerId=sessionStorage.getItem(activeLearnerSessionKey);
   if(!savedLearnerId)return;
+  if(record.accountId!==familyAccount.accountId)throw Error('Parent account mismatch');
   const learner=record.profiles?.learners?.find(item=>item.id===savedLearnerId);
-  if(!learner)return;
+  if(!learner){sessionStorage.removeItem(activeLearnerSessionKey);return;}
   if(location.hash==='#family')return;
   await openLearnerWorkspace(learner);
  }catch(error){storageError=true;notify('Could not restore the selected learner. No progress was overwritten.');render()}
 }
-window.addEventListener('hashchange',render);window.addEventListener('pagehide',()=>{stopMedia();accountStore?.flush().catch(()=>{})});render();restoreLearnerAfterReload();
+window.addEventListener('hashchange',render);window.addEventListener('pagehide',()=>{stopMedia();accountStore?.flush().catch(()=>{})});
+if(sessionStorage.getItem(activeLearnerSessionKey)&&location.hash!=='#family'){
+ app.innerHTML=header()+'<section class="card" role="status"><p>Restoring selected learner…</p></section>';
+ restoreLearnerAfterReload().then(()=>{if(!currentLearner&&!storageError)render()});
+}else render();
