@@ -54,3 +54,10 @@
 #family-content #add-learner select{display:block;box-sizing:border-box;width:100%;min-width:0;min-height:48px;margin:0;}
 #family-content #add-learner button[type=submit]{justify-self:start;width:auto;max-width:100%;margin-top:22px;min-height:44px;}
 #family-content #family-error:not(:empty){margin-top:12px;}
+
+/* Review recovery: usable actions and file picker on narrow phones. */
+#learner-exit-recovery,#review-recovery-notice{box-sizing:border-box;max-width:100%;overflow-wrap:anywhere}
+#learner-exit-recovery .actions,#review-recovery-notice .actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+#learner-exit-recovery label{display:block;margin-top:12px;font-weight:600}
+#learner-exit-recovery input[type=file]{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;margin-top:8px;font-weight:400}
+@media(max-width:600px){#learner-exit-recovery,#review-recovery-notice{padding:16px!important;margin:12px 0!important}#learner-exit-recovery .actions{flex-direction:column}#learner-exit-recovery .actions button,#review-recovery-notice button{width:100%;min-height:44px;white-space:normal}}
