@@ -253,7 +253,7 @@ function showLearnerExitRecovery(error){
    const latest=await learnerWorkspaceApi(learnerId).get();
    if(latest.accountId!==familyAccount.accountId||latest.learnerId!==learnerId)throw Error('Learner account mismatch');
    const result=importScopedReviewDraft(localStorage,familyAccount.accountId,learnerId,raw,latest.state);
-   detail.textContent=result.status==='saved'?'Backup matches online progress. Reopen this learner to verify.':'Backup stored locally only ('+result.status+'). Reopen this learner to compare and recover; online data was not overwritten.';
+   detail.textContent=result.status==='saved'?'Backup matches online progress. Reload this page to verify.':'Backup stored locally only ('+result.status+'). Reload this page to compare and recover; online data was not overwritten.';
   }catch(error){detail.textContent=error.message||'Could not import this backup.'}
   finally{importInput.disabled=false;importInput.value=''}
  };
