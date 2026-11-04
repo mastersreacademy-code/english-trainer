@@ -1,6 +1,7 @@
 import {dailyReview} from './daily-review.js';
 import {learnerReviewSummary} from './learner-review-summary.js';
 import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft,reviewDraftComparison,chooseReviewDraft} from './review-draft.js';
+import {reviewSyncFailure,latestReviewConflict} from './review-sync-conflict.js';
 import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
@@ -99,11 +100,11 @@ function todaysReview(){
      if(status)status.textContent='Results saved to this learner’s private workspace.';
      if(back)back.removeAttribute('aria-disabled');
      app.querySelector('#review-retry')?.remove();
-    }catch{
-     if(status)status.textContent='Not saved to the server. Keep this page open and retry when connected.';
+    }catch(error){
+     if(status)status.textContent=reviewSyncFailure(error)==='conflict'?'Online progress changed on another device. Your local review draft is preserved. Reload this learner to compare before saving.':'Not saved to the server. Keep this page open and retry when connected.';
      let retry=app.querySelector('#review-retry');
      if(!retry){retry=document.createElement('button');retry.id='review-retry';retry.textContent='Retry saving';status?.after(retry)}
-     retry.disabled=false;retry.onclick=()=>{retry.disabled=true;syncReview()};
+     retry.disabled=reviewSyncFailure(error)==='conflict';retry.onclick=()=>{retry.disabled=true;syncReview()};
     }
    }
    syncReview();
@@ -164,13 +165,13 @@ async function openLearnerWorkspace(learner){
  if(remote.accountId!==familyAccount.accountId||remote.learnerId!==learner.id)throw Error('Learner account mismatch');
  const next=await openAccountWorkspace({accountId:familyAccount.accountId,username:learner.nickname,legacy:false},api,updateSync);
  const draftKey=reviewDraftKey(familyAccount.accountId,learner.id);
- let recoveryPending=false;
+ let recoveryPending=false,recoveryConflict=false;
  const recovery=reviewDraftStatus(localStorage,draftKey,next.state);
  if(recovery.status==='saved')clearReviewDraft(localStorage,draftKey);
  if(recovery.status==='recover'){
   next.state=recovery.state;
   next.queue(recovery.state);
-  try{await next.flush();clearReviewDraft(localStorage,draftKey);notify('Your previous review result was recovered and saved.')}catch{recoveryPending=true;notify('Review result recovered locally. Retry saving when online.')}
+  try{await next.flush();clearReviewDraft(localStorage,draftKey);notify('Your previous review result was recovered and saved.')}catch(error){if(reviewSyncFailure(error)==='conflict'){recoveryConflict=true;notify('Online progress changed. Review the conflict before saving.')}else{recoveryPending=true;notify('Review result recovered locally. Retry saving when online.')}}
  }
  if(recovery.status==='conflict'||recovery.status==='invalid')notify('A previous review draft needs attention. No remote progress was overwritten.');
  if(next.state.profile.name!==learner.nickname){
@@ -181,19 +182,20 @@ async function openLearnerWorkspace(learner){
  sessionStorage.setItem(activeLearnerSessionKey,learner.id);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
  clearSession();go('today');notify('Now learning as '+learner.nickname);
- const needsAttention=recoveryPending||recovery.status==='conflict'||recovery.status==='invalid';
+ const needsAttention=recoveryPending||recoveryConflict||recovery.status==='conflict'||recovery.status==='invalid';
  if(needsAttention){
   const panel=document.createElement('section');panel.className='card';panel.id='review-recovery-notice';panel.setAttribute('role','status');
   panel.style.cssText='border:2px solid var(--accent,#64748b);margin:16px 0;padding:16px';
   const title=document.createElement('h2');title.textContent='Review result needs attention';
-  const detail=document.createElement('p');detail.textContent=recoveryMessage(recoveryPending?'pending':recovery.status);
+  const detail=document.createElement('p');detail.textContent=recoveryMessage(recoveryConflict?'conflict':recoveryPending?'pending':recovery.status);
   panel.append(title,detail);
   if(recoveryPending){
    const retry=document.createElement('button');retry.textContent='Retry saving review';panel.append(retry);
    retry.onclick=async()=>{retry.disabled=true;detail.textContent='Syncing…';try{await next.retry();clearReviewDraft(localStorage,draftKey);panel.remove();notify('Recovered review saved online.')}catch{detail.textContent='Still offline or unable to save. The draft is retained on this device.';retry.disabled=false}};
   }
-  if(recovery.status==='conflict'){
-   const comparison=reviewDraftComparison(localStorage,draftKey,next.state);
+  if(recovery.status==='conflict'||recoveryConflict){
+   let comparison=reviewDraftComparison(localStorage,draftKey,next.state);
+   if(recoveryConflict){try{const latest=await latestReviewConflict(api,familyAccount.accountId,learner.id);comparison=reviewDraftComparison(localStorage,draftKey,latest.state)}catch{detail.textContent='Online data changed, but the latest copy could not be loaded. Keep your local draft and retry after reconnecting.'}}
    const score=entry=>entry?entry.correct+'/'+entry.total+' correct on '+entry.date:'No completed review';
    const online=document.createElement('p');online.textContent='Online: '+score(comparison.online)+' ('+comparison.onlineCount+' reviews)';
    const local=document.createElement('p');local.textContent='Saved on this device: '+score(comparison.local)+' ('+comparison.localCount+' reviews)';
@@ -203,8 +205,10 @@ async function openLearnerWorkspace(learner){
    const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Export local draft';
    exportButton.onclick=()=>{const raw=localStorage.getItem(draftKey);if(!raw)return;const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='family-learning-review-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
    const useOnline=document.createElement('button');useOnline.type='button';useOnline.textContent='Use online progress (discard local draft)';
+   if(recoveryConflict)useOnline.disabled=true;
    useOnline.onclick=()=>{if(!confirm('Discard the unsynced local review? This cannot be undone.'))return;chooseReviewDraft(localStorage,draftKey,'online',next.state);panel.remove();notify('Online progress kept; local review draft discarded.')};
    panel.append(keep,exportButton,useOnline);
+   if(recoveryConflict){const explanation=document.createElement('p');explanation.textContent='A revision conflict occurred during saving. Reopen this learner to load the newest online workspace before deciding to discard the local copy.';panel.append(explanation)}
   }
   if(recovery.status==='invalid'){
    const note=document.createElement('p');note.className='small';note.textContent='This draft cannot be compared safely. Keep it until you have a backup.';panel.append(note);
