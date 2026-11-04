@@ -5,6 +5,9 @@ export function reviewDraftKey(accountId,learnerId){
  return prefix+accountId+':'+learnerId;
 }
 export function saveReviewDraft(storage,key,before,after){
+ // Never overwrite an unresolved draft: it may be the only copy of a child's score.
+ const existing=storage.getItem(key);
+ if(existing!==null)throw Error('A previous review draft needs attention before another review can be saved');
  const draft={version:1,before:normalizeWorkspace(before),after:normalizeWorkspace(after)};
  storage.setItem(key,JSON.stringify(draft));return draft;
 }
