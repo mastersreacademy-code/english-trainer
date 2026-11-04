@@ -1,5 +1,6 @@
 import {dailyReview} from './daily-review.js';
 import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft} from './review-draft.js';
+import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
 import {initLanguage,languageControl,locale,translate,applyLanguage} from './i18n.js';
@@ -152,12 +153,13 @@ async function openLearnerWorkspace(learner){
  if(remote.accountId!==familyAccount.accountId||remote.learnerId!==learner.id)throw Error('Learner account mismatch');
  const next=await openAccountWorkspace({accountId:familyAccount.accountId,username:learner.nickname,legacy:false},api,updateSync);
  const draftKey=reviewDraftKey(familyAccount.accountId,learner.id);
+ let recoveryPending=false;
  const recovery=reviewDraftStatus(localStorage,draftKey,next.state);
  if(recovery.status==='saved')clearReviewDraft(localStorage,draftKey);
  if(recovery.status==='recover'){
   next.state=recovery.state;
   next.queue(recovery.state);
-  try{await next.flush();clearReviewDraft(localStorage,draftKey);notify('Your previous review result was recovered and saved.')}catch{notify('Review result recovered locally. Retry saving when online.')}
+  try{await next.flush();clearReviewDraft(localStorage,draftKey);notify('Your previous review result was recovered and saved.')}catch{recoveryPending=true;notify('Review result recovered locally. Retry saving when online.')}
  }
  if(recovery.status==='conflict'||recovery.status==='invalid')notify('A previous review draft needs attention. No remote progress was overwritten.');
  if(next.state.profile.name!==learner.nickname){
@@ -168,6 +170,22 @@ async function openLearnerWorkspace(learner){
  sessionStorage.setItem(activeLearnerSessionKey,learner.id);
  accountSessionKey=workspaceSessionKey+':'+familyAccount.accountId+':'+learner.id;
  clearSession();go('today');notify('Now learning as '+learner.nickname);
+ const needsAttention=recoveryPending||recovery.status==='conflict'||recovery.status==='invalid';
+ if(needsAttention){
+  const panel=document.createElement('section');panel.className='card';panel.id='review-recovery-notice';panel.setAttribute('role','status');
+  panel.style.cssText='border:2px solid var(--accent,#64748b);margin:16px 0;padding:16px';
+  const title=document.createElement('h2');title.textContent='Review result needs attention';
+  const detail=document.createElement('p');detail.textContent=recoveryMessage(recoveryPending?'pending':recovery.status);
+  panel.append(title,detail);
+  if(recoveryPending){
+   const retry=document.createElement('button');retry.textContent='Retry saving review';panel.append(retry);
+   retry.onclick=async()=>{retry.disabled=true;detail.textContent='Syncing…';try{await next.retry();clearReviewDraft(localStorage,draftKey);panel.remove();notify('Recovered review saved online.')}catch{detail.textContent='Still offline or unable to save. The draft is retained on this device.';retry.disabled=false}};
+  }
+  if(recovery.status==='conflict'||recovery.status==='invalid'){
+   const note=document.createElement('p');note.className='small';note.textContent='Keep this draft until you can resolve the difference. It will not be uploaded automatically.';panel.append(note);
+  }
+  app.querySelector('.top')?.after(panel);
+ }
 }
 async function returnToParentWorkspace(){
  if(!currentLearner)return;
