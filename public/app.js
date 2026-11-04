@@ -1,4 +1,5 @@
 import {dailyReview} from './daily-review.js';
+import {learnerReviewSummary} from './learner-review-summary.js';
 import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft,reviewDraftComparison,chooseReviewDraft} from './review-draft.js';
 import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
@@ -228,26 +229,19 @@ async function familyDashboard(){
     if(!slot)continue;
     learnerWorkspaceApi(learner.id).get().then(record=>{
      if(!slot.isConnected)return;
-     if(record.accountId!==familyAccount.accountId||record.learnerId!==learner.id)throw Error('Learner mismatch');
-     const history=Array.isArray(record.state?.reviewHistory)?record.state.reviewHistory:[];
-     const valid=history.filter(item=>item&&Number.isInteger(item.total)&&item.total>0&&Number.isInteger(item.correct)&&item.correct>=0&&item.correct<=item.total&&typeof item.date==='string');
-     if(!valid.length){slot.textContent='Today’s Review: no saved scores yet'}
-     const latest=valid.at(-1);
-     const lastSeven=valid.filter(item=>{const age=Date.parse(dateKey()+'T00:00:00')-Date.parse(item.date+'T00:00:00');return age>=0&&age<7*86400000});
-     if(latest)slot.textContent='Latest review: '+latest.correct+'/'+latest.total+' ('+latest.date+') · Last 7 days: '+lastSeven.length+' review(s)';
-     const days=Array.from({length:7},(_,index)=>{const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-6+index);return dateKey(d)});
+     const summary=learnerReviewSummary(record,familyAccount.accountId,learner.id);
+     if(!summary.latest)slot.textContent='Today’s Review: no saved scores yet';
+     else slot.textContent='Latest review: '+summary.latest.correct+'/'+summary.latest.total+' ('+summary.latest.date+') · Last 7 days: '+summary.lastSeven+' review(s)';
      const chart=document.createElement('div');chart.className='review-week-chart';chart.setAttribute('role','group');chart.setAttribute('aria-label','Daily review progress for '+learner.nickname);
      chart.style.cssText='display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-top:12px;align-items:end';
-     days.forEach(day=>{
-      const attempts=valid.filter(item=>item.date===day);
-      const total=attempts.reduce((sum,item)=>sum+item.total,0),correct=attempts.reduce((sum,item)=>sum+item.correct,0);
+     summary.chart.forEach(({date:day,attempts,total,correct})=>{
       const percentage=total?Math.round(100*correct/total):0;
       const cell=document.createElement('div');cell.style.cssText='display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0';
       const bar=document.createElement('div');bar.style.cssText='height:64px;width:100%;max-width:34px;border-radius:6px;background:var(--line,#e5e7eb);display:flex;align-items:flex-end;overflow:hidden';
       const fill=document.createElement('div');fill.style.cssText='width:100%;height:'+(total?Math.max(8,percentage):0)+'%;background:var(--accent,#64748b);border-radius:6px';bar.append(fill);
       const label=document.createElement('span');label.className='small';label.textContent=day.slice(8);
       const status=document.createElement('span');status.className='small';status.textContent=total?percentage+'%':'—';
-      cell.title=day+': '+(total?correct+'/'+total+' correct across '+attempts.length+' review(s)':'No review completed');
+      cell.title=day+': '+(total?correct+'/'+total+' correct across '+attempts+' review(s)':'No review completed');
       cell.setAttribute('aria-label',cell.title);cell.append(bar,label,status);chart.append(cell);
      });
      slot.after(chart);
