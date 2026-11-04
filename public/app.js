@@ -1,5 +1,6 @@
 import {dailyReview} from './daily-review.js';
 import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft} from './review-draft.js';
+import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
 import {initLanguage,languageControl,locale,translate,applyLanguage} from './i18n.js';
@@ -174,7 +175,7 @@ async function openLearnerWorkspace(learner){
   const panel=document.createElement('section');panel.className='card';panel.id='review-recovery-notice';panel.setAttribute('role','status');
   panel.style.cssText='border:2px solid var(--accent,#64748b);margin:16px 0;padding:16px';
   const title=document.createElement('h2');title.textContent='Review result needs attention';
-  const detail=document.createElement('p');detail.textContent=recoveryPending?'A review was recovered on this device but is not yet saved online. Retry when connected.':recovery.status==='conflict'?'The online progress changed since this review was saved locally. The local draft has been kept; nothing was overwritten.':'The saved review draft could not be read. Online progress has not been changed.';
+  const detail=document.createElement('p');detail.textContent=recoveryMessage(recoveryPending?'pending':recovery.status);
   panel.append(title,detail);
   if(recoveryPending){
    const retry=document.createElement('button');retry.textContent='Retry saving review';panel.append(retry);
