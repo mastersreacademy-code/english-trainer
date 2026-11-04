@@ -3,6 +3,7 @@ import {learnerReviewSummary} from './learner-review-summary.js';
 import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft,reviewDraftComparison,chooseReviewDraft} from './review-draft.js';
 import {reviewSyncFailure,latestReviewConflict} from './review-sync-conflict.js';
 import {assertLearnerReviewCanExit} from './learner-exit-guard.js';
+import {exportScopedReviewDraft,importScopedReviewDraft} from './review-backup.js';
 import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
@@ -207,7 +208,7 @@ async function openLearnerWorkspace(learner){
    const keep=document.createElement('button');keep.textContent='Keep local copy';keep.type='button';
    keep.onclick=()=>{detail.textContent='Local copy retained on this device. Online progress stays unchanged. You can export the draft for safekeeping.'};
    const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Export local draft';
-   exportButton.onclick=()=>{const raw=localStorage.getItem(draftKey);if(!raw)return;const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='family-learning-review-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+   exportButton.onclick=()=>{let raw;try{raw=exportScopedReviewDraft(localStorage,familyAccount.accountId,learner.id)}catch(error){detail.textContent=error.message;return}const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='family-learning-review-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
    const useOnline=document.createElement('button');useOnline.type='button';useOnline.textContent='Use online progress (discard local draft)';
    if(recoveryConflict)useOnline.disabled=true;
    useOnline.onclick=()=>{if(!confirm('Discard the unsynced local review? This cannot be undone.'))return;chooseReviewDraft(localStorage,draftKey,'online',next.state);panel.remove();notify('Online progress kept; local review draft discarded.')};
@@ -233,13 +234,31 @@ function showLearnerExitRecovery(error){
  const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Export review backup';
  exportButton.onclick=()=>{
   const key=reviewDraftKey(familyAccount.accountId,currentLearner.id);
-  const raw=localStorage.getItem(key);
-  if(!raw){detail.textContent='No local review draft is available to export. Your online data has not been changed.';return}
+  let raw;
+  try{raw=exportScopedReviewDraft(localStorage,familyAccount.accountId,currentLearner.id)}catch(error){detail.textContent=error.message;return}
   const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));
   const link=document.createElement('a');link.href=url;link.download='family-learning-review-'+currentLearner.id+'.json';link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  };
- actions.append(retry,exportButton);panel.append(heading,detail,actions);app.before(panel);
+ const importLabel=document.createElement('label');importLabel.textContent='Import review backup (JSON)';
+ const importInput=document.createElement('input');importInput.type='file';importInput.accept='.json,application/json';importInput.setAttribute('aria-label','Import review backup JSON');
+ importInput.onchange=async()=>{
+  const file=importInput.files?.[0];if(!file)return;
+  const learnerId=currentLearner.id;
+  if(file.size>2_000_000){detail.textContent='Backup exceeds the 2 MB limit.';return}
+  importInput.disabled=true;
+  try{
+   const raw=await file.text();
+   if(currentLearner?.id!==learnerId)throw Error('Learner changed during import');
+   const latest=await learnerWorkspaceApi(learnerId).get();
+   if(latest.accountId!==familyAccount.accountId||latest.learnerId!==learnerId)throw Error('Learner account mismatch');
+   const result=importScopedReviewDraft(localStorage,familyAccount.accountId,learnerId,raw,latest.state);
+   detail.textContent=result.status==='saved'?'Backup matches online progress. Reload this page to verify.':'Backup stored locally only ('+result.status+'). Reload this page to compare and recover; online data was not overwritten.';
+  }catch(error){detail.textContent=error.message||'Could not import this backup.'}
+  finally{importInput.disabled=false;importInput.value=''}
+ };
+ importLabel.append(importInput);
+ actions.append(retry,exportButton);panel.append(heading,detail,actions,importLabel);app.before(panel);
 }
 async function ensureLearnerCanExit(){
  if(!currentLearner)return;
