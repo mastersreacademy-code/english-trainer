@@ -2,6 +2,7 @@ import {dailyReview} from './daily-review.js';
 import {learnerReviewSummary} from './learner-review-summary.js';
 import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft,reviewDraftComparison,chooseReviewDraft} from './review-draft.js';
 import {reviewSyncFailure,latestReviewConflict} from './review-sync-conflict.js';
+import {assertLearnerReviewCanExit} from './learner-exit-guard.js';
 import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
@@ -157,7 +158,8 @@ on('#export',()=>download(workspaceBackup(state),`english-trainer-${dateKey()}.j
 $('#import').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>8000000)throw Error();const candidates=backupCandidates(JSON.parse(await file.text()));$('#restore-preview').innerHTML=`${candidates.length>1?'<label for="restore-source">Previous profile to restore</label><select id="restore-source">'+candidates.map((c,i)=>`<option value="${i}">${esc(c.label)}</option>`).join('')+'</select>':''}<p class="feedback">Restore this backup? This replaces your current workspace. Export your current progress first if you want to keep both.</p><div class="actions"><button id="confirm-restore">Restore this backup</button><button class="secondary" id="cancel-restore">Cancel</button></div>`;on('#confirm-restore',()=>{try{const candidate=candidates[Number($('#restore-source')?.value||0)];if(!candidate)throw Error();stopMedia();clearSession();const restored=normalizeWorkspace(candidate.state);accountStore.queue(restored);state=restored;storageError=false;revealed=false;go('today');notify('Backup restored. Saving to your account…')}catch{notify('Could not restore. Your saved backup file is unchanged.')}});on('#cancel-restore',()=>{$('#restore-preview').innerHTML='';$('#import').value=''})}catch{notify('This backup is invalid or has an unknown plan. Nothing has changed.')}};}
 async function openLearnerWorkspace(learner){
  if(storageError)throw Error('Account workspace is unavailable');
- await accountStore.flush();
+ if(currentLearner)await ensureLearnerCanExit();
+ else await accountStore.flush();
  if(!currentLearner)parentState=state;
  stopMedia();clearSession();
  const api=learnerWorkspaceApi(learner.id);
@@ -217,9 +219,16 @@ async function openLearnerWorkspace(learner){
   app.before(panel);
  }
 }
-async function returnToParentWorkspace(){
+async function ensureLearnerCanExit(){
  if(!currentLearner)return;
  await accountStore.flush();
+ const online=await learnerWorkspaceApi(currentLearner.id).get();
+ if(online.accountId!==familyAccount.accountId||online.learnerId!==currentLearner.id)throw Error('Learner account mismatch');
+ assertLearnerReviewCanExit(localStorage,familyAccount.accountId,currentLearner.id,online.state);
+}
+async function returnToParentWorkspace(){
+ if(!currentLearner)return;
+ await ensureLearnerCanExit();
  stopMedia();clearSession();
  document.querySelector('#review-recovery-notice')?.remove();
  accountStore=parentStore;state=parentState;currentLearner=null;
@@ -274,7 +283,7 @@ async function familyDashboard(){
 }
 function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';if(currentLearner&&page==='family'){app.innerHTML=header()+'<h1>Learning as '+esc(currentLearner.nickname)+'</h1><p>Save this learner’s progress before returning to the parent account.</p><button id="return-to-parent">Return to family profiles</button><p id="return-error" role="status"></p>';on('#return-to-parent',async()=>{const button=$('#return-to-parent');button.disabled=true;try{await returnToParentWorkspace()}catch(error){$('#return-error').textContent=error.message;button.disabled=false}});return}document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(page==='family'){familyDashboard();window.scrollTo(0,0);return}if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,'daily-review':todaysReview,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
 
-document.addEventListener('click',async e=>{if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){notify(error.message);button.disabled=false}return}});
+document.addEventListener('click',async e=>{if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{if(currentLearner)await ensureLearnerCanExit();else await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){notify(error.message);button.disabled=false}return}});
 document.querySelector('.skip-link')?.addEventListener('click',e=>{e.preventDefault();app.focus()});
 document.querySelectorAll('[data-nav-icon]').forEach(el=>el.innerHTML=icon(el.dataset.navIcon));
 document.querySelector('#release-version').textContent='Version '+buildInfo.version;
