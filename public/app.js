@@ -163,10 +163,10 @@ async function familyDashboard(){
      if(record.accountId!==familyAccount.accountId||record.learnerId!==learner.id)throw Error('Learner mismatch');
      const history=Array.isArray(record.state?.reviewHistory)?record.state.reviewHistory:[];
      const valid=history.filter(item=>item&&Number.isInteger(item.total)&&item.total>0&&Number.isInteger(item.correct)&&item.correct>=0&&item.correct<=item.total&&typeof item.date==='string');
-     if(!valid.length){slot.textContent='Today’s Review: no saved scores yet';return}
+     if(!valid.length){slot.textContent='Today’s Review: no saved scores yet'}
      const latest=valid.at(-1);
      const lastSeven=valid.filter(item=>{const age=Date.parse(dateKey()+'T00:00:00')-Date.parse(item.date+'T00:00:00');return age>=0&&age<7*86400000});
-     slot.textContent='Latest review: '+latest.correct+'/'+latest.total+' ('+latest.date+') · Last 7 days: '+lastSeven.length+' review(s)';
+     if(latest)slot.textContent='Latest review: '+latest.correct+'/'+latest.total+' ('+latest.date+') · Last 7 days: '+lastSeven.length+' review(s)';
      const days=Array.from({length:7},(_,index)=>{const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-6+index);return dateKey(d)});
      const chart=document.createElement('div');chart.className='review-week-chart';chart.setAttribute('role','group');chart.setAttribute('aria-label','Daily review progress for '+learner.nickname);
      chart.style.cssText='display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-top:12px;align-items:end';
