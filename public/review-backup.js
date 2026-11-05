@@ -22,7 +22,10 @@ export function importScopedReviewDraft(storage,accountId,learnerId,raw,remote){
  if(draft?.version!==1||!draft.before||!draft.after||!Array.isArray(draft.before.reviewHistory)||!Array.isArray(draft.after.reviewHistory))throw Error('Invalid review backup');
  // Never trust a backup to replace server progress: stage it only as a local draft.
  const before=normalizeWorkspace(draft.before),after=normalizeWorkspace(draft.after);
- if(after.reviewHistory.length<=before.reviewHistory.length)throw Error('Backup has no additional completed review');
+ if(after.reviewHistory.length!==before.reviewHistory.length+1)throw Error('Backup must contain exactly one additional completed review');
+ if(JSON.stringify(after.reviewHistory.slice(0,-1))!==JSON.stringify(before.reviewHistory))throw Error('Backup changes earlier review results');
+ const entry=after.reviewHistory.at(-1);
+ if(!entry||!Number.isInteger(entry.correct)||!Number.isInteger(entry.total)||entry.total<1||entry.correct<0||entry.correct>entry.total||typeof entry.date!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date))throw Error('Backup review score is invalid');
  const encoded=JSON.stringify({version:1,before,after});
  const preview={getItem:k=>k===key?encoded:null};
  const status=reviewDraftStatus(preview,key,remote).status;
