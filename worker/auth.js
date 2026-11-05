@@ -18,6 +18,7 @@ const TOKEN_LIFETIME=30*60*1000;
 const PUBLIC_AUTH_RESPONSE={ok:true,message:'If the email belongs to an account, instructions will be sent.'};
 async function sendAccountEmail(env,email,subject,link){
  if(!env.EMAIL_API_KEY||!env.EMAIL_FROM)throw Error('Email delivery is not configured');
+ if(typeof env.EMAIL_SEND==='function')return env.EMAIL_SEND({email,subject,link});
  const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+env.EMAIL_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[email],subject,text:subject+'\\n\\nOpen this link to continue: '+link+'\\n\\nThis link expires in 30 minutes. If you did not request it, ignore this message.'})});
  if(!response.ok)throw Error('Email delivery failed');
 }
