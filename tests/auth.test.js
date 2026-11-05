@@ -182,6 +182,7 @@ test('forgot password is non-enumerating, single-use, expiring and revokes all s
  assert.equal((await f.auth.fetch(req('/api/auth/reset-password',{token:resetToken,password:'Another long secure password'}))).status,400);
  assert.equal((await f.auth.fetch(req('/api/auth/session',undefined,cookie))).status,401);
  assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password}))).status,401);
+ await f.ctx.storage.delete('rate:'+await digest('test-client'));
  assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password:'New long secure password 987!'}))).status,200);
  await f.ctx.storage.delete('rate:'+await digest('test-client'));
  await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test'}));
