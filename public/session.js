@@ -14,6 +14,7 @@ export const workspaceApi={async get(){const response=await fetch('/api/workspac
 // Family profiles are stored separately from the legacy learning workspace.
 export const learnerProfilesApi={
  async get(){const response=await fetch('/api/learners',{credentials:'same-origin',cache:'no-store'});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not load learner profiles.');error.status=response.status;throw error}return result},
+ async remove(revision,learnerId){const response=await fetch('/api/learners/delete',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':current?.csrf||''},body:JSON.stringify({accountId:current?.accountId,revision,learnerId,confirmed:true})});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not remove learner and progress.');error.status=response.status;throw error}return result},
  async put(revision,profiles){const response=await fetch('/api/learners',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':current?.csrf||''},body:JSON.stringify({accountId:current?.accountId,revision,profiles})});const result=await response.json();if(!response.ok){const error=Error(result.error||'Could not save learner profiles.');error.status=response.status;throw error}return result}
 };
 
