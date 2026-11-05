@@ -47,6 +47,7 @@ async function register(page,name){
  await expect(page.getByRole('button',{name:'New here? Create an account'})).toBeVisible();
  await page.getByRole('button',{name:'New here? Create an account'}).click();
  await page.locator('#username').fill(name);
+ await page.locator('#email').fill(name+'@example.test');
  await page.locator('#password').fill('Secure family passphrase 123!');
  await page.locator('#password-confirm').fill('Secure family passphrase 123!');
  await page.locator('#auth-submit').click();
@@ -86,6 +87,7 @@ test('registration rejects duplicate names and incorrect password without exposi
  await page.goto('/login');
  await page.getByRole('button',{name:'New here? Create an account'}).click();
  await page.locator('#username').fill('parentalice');
+ await page.locator('#email').fill('parentalice@example.test');
  await page.locator('#password').fill('Secure family passphrase 123!');
  await page.locator('#password-confirm').fill('Secure family passphrase 123!');
  await page.locator('#auth-submit').click();
@@ -101,6 +103,7 @@ test('registration rejects duplicate names and incorrect password without exposi
 test('switching between two parent accounts never displays the other family child',async({page,isMobile})=>{
  const db=service(page);await register(page,'parentalice');await addChild(page,'Mia');
  await page.getByRole('button',{name:'Sign out'}).click();
+ await expect(page).toHaveURL(new RegExp('/login$'));
  await register(page,'parentbob');
  await page.goto('/#family');
  await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();
