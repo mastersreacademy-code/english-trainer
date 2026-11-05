@@ -84,7 +84,7 @@ test('child scores and backup drafts are isolated across profile switching and l
  await page.locator('#username').fill('parent');
  await page.locator('#password').fill('samplepassword');
  await page.locator('#auth-submit').click();
- await expect(page).toHaveURL(/\\/(?:#today)?$/);
+ await expect(page).toHaveURL(new RegExp('/(?:#today)?$'));
  await expect(page.getByRole('button',{name:'Sign out'})).toBeVisible();
  await page.getByRole('link',{name:/Family profiles/}).click();await expect.poll(async()=>await page.getByRole('button',{name:'Return to family profiles'}).isVisible()||await page.getByRole('heading',{name:'Family profiles'}).isVisible()).toBe(true);if(await page.getByRole('button',{name:'Return to family profiles'}).isVisible())await page.getByRole('button',{name:'Return to family profiles'}).click();await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();await page.locator('[data-open-learner="'+first+'"]').click();await expect(page.getByRole('button',{name:'Khôi phục bài ôn'})).toBeVisible();
  expect(db.children[first].state.reviewHistory).toHaveLength(1);
