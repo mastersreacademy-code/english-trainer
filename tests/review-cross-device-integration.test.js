@@ -46,6 +46,7 @@ test('online choice rejects changed local draft while awaiting server response',
  const api=server(),storage=memory(),key=reviewDraftKey(parent,learner),before=(await api.get()).state;
  saveReviewDraft(storage,key,before,completed(before));
  const expected=await api.get();
+ expected.state.profile.name='Updated remotely';
  const gate={get:async()=>{storage.setItem(key,JSON.stringify({version:1,before,after:completed(before,2)}));return expected}};
  await assert.rejects(discardReviewDraftAfterVerification(storage,parent,learner,gate,expected),/changed during verification/);
  assert.equal(JSON.parse(storage.getItem(key)).after.reviewHistory[0].correct,2);
