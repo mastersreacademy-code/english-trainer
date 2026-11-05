@@ -87,6 +87,7 @@ test('registration rejects duplicate names and incorrect password without exposi
  await page.goto('/login');
  await page.getByRole('button',{name:'New here? Create an account'}).click();
  await page.locator('#username').fill('parentalice');
+ await page.locator('#email').fill('parentalice@example.test');
  await page.locator('#password').fill('Secure family passphrase 123!');
  await page.locator('#password-confirm').fill('Secure family passphrase 123!');
  await page.locator('#auth-submit').click();
