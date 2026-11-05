@@ -16,12 +16,11 @@ async function mock(page,db){
   if(path==='/api/auth/login'){db.signedIn=true;return send({accountId:account})}
   if(path==='/api/learners')return send({accountId:account,revision:1,profiles:{version:1,activeId:first,learners:[{id:first,nickname:'Mia',grade:5,subjects:['english']},{id:second,nickname:'Anna',grade:5,subjects:['english']}]}});
   if(path==='/api/workspace'||path==='/api/learner-workspace'){
-   const isChild=path==='/api/learner-workspace',id=url.searchParams.get('learnerId')||url.searchParams.get('id');
+   const isChild=path==='/api/learner-workspace',body=post?req.postDataJSON():null,id=isChild?(post?body.learnerId:url.searchParams.get('learnerId')):null;
    const record=isChild?db.children[id]:db.parent;
    if(!record)return send({error:'Unknown learner'},404);
    if(!post)return send({accountId:account,...(isChild?{learnerId:id}:{}),revision:record.revision,state:structuredClone(record.state)});
    if(isChild&&db.failWrites)return route.abort('failed');
-   const body=req.postDataJSON();
    if(body.revision!==record.revision)return send({error:'Revision conflict'},409);
    record.state=structuredClone(body.state);record.revision++;
    return send({accountId:account,...(isChild?{learnerId:id}:{}),revision:record.revision});
