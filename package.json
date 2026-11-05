@@ -12,9 +12,11 @@
     "predev": "node scripts/version.mjs",
     "predeploy": "node scripts/version.mjs",
     "prepare": "node scripts/version.mjs",
-    "test:runtime": "node scripts/check-auth-runtime.mjs"
+    "test:runtime": "node scripts/check-auth-runtime.mjs",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.0.0",
+    "@playwright/test": "^1.56.1"
   }
 }
