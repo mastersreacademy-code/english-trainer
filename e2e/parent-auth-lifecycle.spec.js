@@ -103,7 +103,7 @@ test('registration rejects duplicate names and incorrect password without exposi
 test('switching between two parent accounts never displays the other family child',async({page,isMobile})=>{
  const db=service(page);await register(page,'parentalice');await addChild(page,'Mia');
  await page.getByRole('button',{name:'Sign out'}).click();
- await expect(page).toHaveURL(/\\/login$/);
+ await expect(page).toHaveURL(new RegExp('/login$'));
  await register(page,'parentbob');
  await page.goto('/#family');
  await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();
