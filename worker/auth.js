@@ -19,7 +19,7 @@ const PUBLIC_AUTH_RESPONSE={ok:true,message:'If the email belongs to an account,
 async function sendAccountEmail(env,email,subject,link){
  if(!env.EMAIL_API_KEY||!env.EMAIL_FROM)throw Error('Email delivery is not configured');
  if(typeof env.EMAIL_SEND==='function')return env.EMAIL_SEND({email,subject,link});
- const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+env.EMAIL_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[email],subject,text:subject+'\\n\\nOpen this link to continue: '+link+'\\n\\nThis link expires in 30 minutes. If you did not request it, ignore this message.'})});
+ const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+env.EMAIL_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[email],subject,text:subject+'\n\nOpen this link to continue: '+link+'\n\nThis link expires in 30 minutes. If you did not request it, ignore this message.'})});
  if(!response.ok)throw Error('Email delivery failed');
 }
 export class FamilyAuth {
@@ -67,6 +67,7 @@ if(await this.storage.get('user:'+username))return json({error:'That username is
 const salt=randomToken(),hash=await passwordHash(body.password,salt);await this.storage.put('account',{username,salt,hash,iterations:ITERATIONS,created:Date.now()});return this.newSession({username,id:'legacy'});
 }
 if(path==='/api/auth/register'){
+if(body.website)return json({error:'Registration unavailable.'},400);
  if(this.env.EMAIL_API_KEY){
   if(!this.env.EMAIL_FROM)return json({error:'Email delivery is not configured.'},503);
   if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
