@@ -1,5 +1,5 @@
 import {normalizeWorkspace} from '../public/workspace.js';
-import {normalizeLearners,emptyLearners} from '../public/learner-profiles.js';
+import {normalizeLearners,emptyLearners,deleteLearner} from '../public/learner-profiles.js';
 export const COOKIE='__Host-english_session';
 export const SESSION_MS=12*60*60*1000;
 export const ITERATIONS=100000;
@@ -71,6 +71,25 @@ const hash=await passwordHash(password,user?.salt||'unavailable-account',user?.i
 if(!user||!constantEqual(hash,user.hash))return json({error:'Username or password is incorrect.'},401);
 return this.newSession(user);
 }
+if(path==='/api/learners/delete'){
+ const session=await this.session(request),owner=await this.sessionAccount(session);
+ if(!owner)return json({error:'Please sign in again.'},401);
+ if(!constantEqual(request.headers.get('X-CSRF-Token'),session.csrf))return json({error:'Please reload and try again.'},403);
+ if(body.accountId!==owner.id)return json({error:'This family belongs to a different account.'},403);
+ if(!Number.isSafeInteger(body.revision)||body.revision<0||typeof body.learnerId!=='string'||!body.confirmed)return json({error:'Explicit learner deletion confirmation is required.'},400);
+ const key='learners:'+owner.id;
+ const result=await this.storage.transaction(async txn=>{
+  const current=await txn.get(key);
+  if(body.revision!==(current?.revision||0))return {status:409,error:'Family profiles changed on another device. Reload before deleting.'};
+  let profiles;try{profiles=deleteLearner(current?.profiles||emptyLearners(),body.learnerId)}catch{return {status:404,error:'Learner not found in this account.'}};
+  const revision=(current?.revision||0)+1;
+  await txn.delete('learner-workspace:'+owner.id+':'+body.learnerId);
+  await txn.put(key,{revision,profiles,updated:Date.now()});
+  return {status:200,accountId:owner.id,revision,profiles};
+ });
+ if(result.status!==200)return json({error:result.error},result.status);
+ return json({accountId:result.accountId,revision:result.revision,profiles:result.profiles});
+}
 if(path==='/api/learners'){
  const session=await this.session(request),owner=await this.sessionAccount(session);
  if(!owner)return json({error:'Please sign in again.'},401);
@@ -80,6 +99,7 @@ if(path==='/api/learners'){
  let profiles;try{profiles=normalizeLearners(body.profiles)}catch{return json({error:'Invalid learner profiles.'},400)}
  const key='learners:'+owner.id,current=await this.storage.get(key);
  if(body.revision!==(current?.revision||0))return json({error:'Family profiles changed on another device. Reload before saving.'},409);
+ if((current?.profiles?.learners||[]).some(item=>!profiles.learners.some(next=>next.id===item.id)))return json({error:'Use confirmed learner deletion to remove a child and their progress.'},400);
  const revision=(current?.revision||0)+1;
  await this.storage.put(key,{revision,profiles,updated:Date.now()});
  return json({accountId:owner.id,revision});

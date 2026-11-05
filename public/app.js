@@ -14,7 +14,7 @@ import {plans,planGroups,planFor,filterPlans} from './plan-library.js';
 import {requireSession,signOut,changePassword,workspaceApi,learnerProfilesApi,learnerWorkspaceApi} from './session.js';
 import {buildInfo} from './version.js';
 import {familyKey,isChild} from './family.js';
-import {addLearner,chooseLearner,deleteLearner} from './learner-profiles.js';
+import {addLearner,chooseLearner,editLearner} from './learner-profiles.js';
 import {subjects} from './subjects.js';
 import {initAppearance} from './appearance.js';
 import {goalDetails,icon,scene} from './visuals.js';
@@ -300,7 +300,7 @@ async function familyDashboard(){
   function draw(){
    const profiles=record.profiles;
    container.innerHTML='<h2>Your learners</h2><h3>School subjects · Môn học</h3><div class="family-list">'+subjects.map(subject=>'<div class="family-learner"><div><strong>'+esc(subject.nameVi)+' / '+esc(subject.name)+'</strong><p class="small">Lớp 1–12 · Classes 1–12</p></div><span class="small">'+(subject.available?'Available · Đang học':'Coming soon · Sắp ra mắt')+'</span></div>').join('')+'</div><p class="small">Toán và Tiếng Việt đang chuẩn bị nội dung; chưa thể bắt đầu học hai môn này.</p>'+
-    (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p><p class="small" data-review-summary="'+esc(item.id)+'">Loading review progress…</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
+    (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p><p class="small" data-review-summary="'+esc(item.id)+'">Loading review progress…</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-edit-learner="'+esc(item.id)+'">Edit</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
     '<h3>Add a child</h3><form id="add-learner"><label for="learner-nickname">Nickname</label><input id="learner-nickname" name="nickname" maxlength="40" required autocomplete="off"><label for="learner-grade">Class level</label><select id="learner-grade" name="grade">'+Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'">Class '+(i+1)+'</option>').join('')+'</select><button type="submit">Add learner</button></form><p id="family-error" role="status" aria-live="polite"></p>';
    // Parent-only read of each child's existing authenticated workspace.
    // Never copy scores into the parent's workspace or mix learner IDs.
@@ -331,7 +331,34 @@ async function familyDashboard(){
    container.querySelector('#add-learner').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{const id=crypto.randomUUID().replaceAll('-','');await persist(addLearner(record.profiles,{nickname:form.elements.nickname.value,grade:Number(form.elements.grade.value),subjects:['english']},id))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}};
    container.querySelectorAll('[data-select-learner]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await persist(chooseLearner(record.profiles,button.dataset.selectLearner))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
    container.querySelectorAll('[data-open-learner]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{const learner=record.profiles.learners.find(item=>item.id===button.dataset.openLearner);if(!learner)throw Error('Learner not found');await openLearnerWorkspace(learner)}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
-   container.querySelectorAll('[data-delete-learner]').forEach(button=>button.onclick=async()=>{if(button.dataset.confirmRemove!=='yes'){button.dataset.confirmRemove='yes';button.textContent='Confirm remove';button.setAttribute('aria-label','Confirm removal of this child profile');return}button.disabled=true;try{await persist(deleteLearner(record.profiles,button.dataset.deleteLearner))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
+   container.querySelectorAll('[data-edit-learner]').forEach(button=>button.onclick=()=>{
+    const learner=record.profiles.learners.find(item=>item.id===button.dataset.editLearner);
+    if(!learner)return;
+    const panel=document.createElement('form');panel.className='card form';panel.setAttribute('data-edit-form',learner.id);
+    panel.innerHTML='<h3>Edit '+esc(learner.nickname)+'</h3><label>Nickname<input name="nickname" maxlength="40" required value="'+esc(learner.nickname)+'"></label><label>Class level<select name="grade">'+Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'" '+(learner.grade===i+1?'selected':'')+'>Class '+(i+1)+'</option>').join('')+'</select></label><div class="actions"><button type="submit">Save changes</button><button type="button" class="secondary" data-cancel-edit>Cancel</button></div>';
+    container.querySelector('[data-edit-form]')?.remove();
+    button.closest('.family-learner').after(panel);
+    panel.querySelector('[data-cancel-edit]').onclick=()=>panel.remove();
+    panel.onsubmit=async event=>{event.preventDefault();const submit=panel.querySelector('[type="submit"]');submit.disabled=true;try{await persist(editLearner(record.profiles,learner.id,{nickname:panel.elements.nickname.value,grade:Number(panel.elements.grade.value)}))}catch(error){container.querySelector('#family-error').textContent=error.message;submit.disabled=false}};
+   });
+   container.querySelectorAll('[data-delete-learner]').forEach(button=>button.onclick=async()=>{
+    const id=button.dataset.deleteLearner,learner=record.profiles.learners.find(item=>item.id===id);
+    if(!learner)return;
+    if(localStorage.getItem(reviewDraftKey(familyAccount.accountId,id))!==null){container.querySelector('#family-error').textContent='Resolve or export the unfinished review for '+learner.nickname+' before removing this profile.';return}
+    if(button.dataset.confirmRemove!=='yes'){
+     button.dataset.confirmRemove='yes';button.textContent='Confirm remove';button.setAttribute('aria-label','Confirm removal of this child profile');
+     container.querySelector('#family-error').textContent='Removing '+learner.nickname+' permanently deletes this child’s saved learning progress. Click Confirm remove again to continue.';
+     return;
+    }
+    button.disabled=true;
+    try{
+     const result=await learnerProfilesApi.remove(record.revision,id);
+     if(result.accountId!==familyAccount.accountId||!result.profiles||result.profiles.learners.some(item=>item.id===id))throw Error('Deletion response could not be verified');
+     record={...record,revision:result.revision,profiles:result.profiles};
+     sessionStorage.removeItem('english-active-learner:'+familyAccount.accountId);
+     draw();notify('Learner and saved learning progress removed.');
+    }catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}
+   });
   }
   draw();
  }catch(error){container.innerHTML='<p>Could not load family profiles. Your existing learning data is safe.</p><p class="small">'+esc(error.message)+'</p><button id="family-retry">Try again</button>';on('#family-retry',familyDashboard)}

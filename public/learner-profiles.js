@@ -25,3 +25,9 @@ export function deleteLearner(value,id){
  if(learners.length===current.learners.length)throw Error('Learner not found');
  return normalizeLearners({version:1,learners,activeId:current.activeId===id?(learners[0]?.id??null):current.activeId});
 }
+
+export function editLearner(value,id,changes){
+ const current=normalizeLearners(value);
+ if(!current.learners.some(item=>item.id===id))throw Error('Learner not found');
+ return normalizeLearners({...current,learners:current.learners.map(item=>item.id===id?{...item,nickname:changes.nickname,grade:changes.grade}:item)});
+}
