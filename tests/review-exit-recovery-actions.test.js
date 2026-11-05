@@ -10,7 +10,7 @@ test('blocked exit displays retry and backup actions without discarding a review
  const source=app.slice(start,end);
  assert.ok(start>=0&&end>start);
  assert.match(source,/Retry sync/);
- assert.match(source,/Export review backup/);
+ assert.match(source,/Export backup/);
  assert.match(source,/await accountStore\.retry\(\)/);
  assert.match(source,/await ensureLearnerCanExit\(\)/);
  assert.match(source,/exportScopedReviewDraft\(localStorage,familyAccount\.accountId,currentLearner\.id\)/);
