@@ -76,7 +76,7 @@ if(path==='/api/learners/delete'){
  if(!owner)return json({error:'Please sign in again.'},401);
  if(!constantEqual(request.headers.get('X-CSRF-Token'),session.csrf))return json({error:'Please reload and try again.'},403);
  if(body.accountId!==owner.id)return json({error:'This family belongs to a different account.'},403);
- if(!Number.isSafeInteger(body.revision)||body.revision<0||typeof body.learnerId!=='string'||!body.confirmed)return json({error:'Explicit learner deletion confirmation is required.'},400);
+ if(!Number.isSafeInteger(body.revision)||body.revision<0||typeof body.learnerId!=='string'||body.confirmed!==true)return json({error:'Explicit learner deletion confirmation is required.'},400);
  const key='learners:'+owner.id;
  const result=await this.storage.transaction(async txn=>{
   const current=await txn.get(key);
