@@ -1,5 +1,32 @@
 import {test,expect} from '@playwright/test';
-import {backend,openChild} from './family-review.spec.js';
+import {freshWorkspace} from '../public/workspace.js';
+function backend(page,{signedIn=true,sharedDb=null}={}){
+ const parent=freshWorkspace();parent.profile.name='Parent';
+ const childState=freshWorkspace();childState.profile.name='Mia';childState.profile.goal='grade5';
+ const db=sharedDb??{parent:{revision:1,state:parent},child:{revision:1,state:childState},offline:false,failWrites:false,signedIn};
+ page.route('**/api/**',async route=>{
+  const request=route.request(),url=new URL(request.url()),path=url.pathname,post=request.method()==='POST';
+  const json=(value,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)});
+  if(path==='/api/auth/session')return json({authenticated:db.signedIn,accountId:account,username:'Parent',csrf:'test-token'});
+  if(path==='/api/auth/login'){db.signedIn=true;return json({accountId:account})}
+  if(path==='/api/auth/logout')return json({ok:true});
+  if(path==='/api/learners')return json({accountId:account,revision:1,profiles:{version:1,activeId:child,learners:[{id:child,nickname:'Mia',grade:5,subjects:['english']}]}});
+  if(path==='/api/workspace'||path==='/api/learner-workspace'){
+   const learner=path.endsWith('learner-workspace'),record=learner?db.child:db.parent;
+   if(db.offline)return route.abort('failed');
+   if(!post)return json({accountId:account,...(learner?{learnerId:child}:{}),revision:record.revision,state:record.state});
+   if(db.failWrites)return route.abort('failed');
+   const body=request.postDataJSON();
+   if(body.revision!==record.revision)return json({error:'Revision conflict'},409);
+   record.state=body.state;record.revision++;
+   return json({accountId:account,...(learner?{learnerId:child}:{}),revision:record.revision});
+  }
+  return json({error:'Not found'},404);
+ });
+ return db;
+}
+async function openChild(page){await page.goto('/');await page.getByRole('link',{name:/Family profiles/}).click();await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();await page.getByRole('button',{name:'Start learning'}).click();await expect(page.getByRole('button',{name:'Khôi phục bài ôn'})).toBeVisible()}
+
 import {dateKey} from '../public/learning.js';
 const account='parent1',learner='child0001';
 function seed(db){
