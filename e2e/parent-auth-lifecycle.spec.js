@@ -64,7 +64,7 @@ async function addChild(page,name){
  await page.locator('#learner-nickname').fill(name);
  await page.locator('#learner-grade').selectOption('5');
  await page.locator('#add-learner button[type="submit"]').click();
- await expect(page.locator('.family-learner')).toContainText(name);
+ await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText(name);
 }
 test('register, sign out and sign back in restores the same family profiles',async({page,isMobile})=>{
  const db=service(page);await register(page,'parentalice');
@@ -75,7 +75,7 @@ test('register, sign out and sign back in restores the same family profiles',asy
  expect(db.logouts).toBe(1);
  await signIn(page,'parentalice');
  await page.goto('/#family');
- await expect(page.locator('.family-learner')).toContainText('Mia');
+ await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Mia');
  if(isMobile){const widths=await page.evaluate(()=>({document:document.documentElement.scrollWidth,viewport:innerWidth}));expect(widths.document).toBeLessThanOrEqual(widths.viewport+2)}
 });
 test('registration rejects duplicate names and incorrect password without exposing private workspace',async({page})=>{
@@ -103,13 +103,13 @@ test('switching between two parent accounts never displays the other family chil
  await register(page,'parentbob');
  await page.goto('/#family');
  await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();
- await expect(page.locator('.family-learner')).toHaveCount(0);
+ await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toHaveCount(0);
  await addChild(page,'Anna');
  await expect(page.locator('body')).not.toContainText('Mia');
  await page.getByRole('button',{name:'Sign out'}).click();
  await signIn(page,'parentalice');
  await page.goto('/#family');
- await expect(page.locator('.family-learner')).toContainText('Mia');
+ await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Mia');
  await expect(page.locator('body')).not.toContainText('Anna');
  expect(db.accounts.get('parentalice').profiles.learners.map(x=>x.nickname)).toEqual(['Mia']);
  expect(db.accounts.get('parentbob').profiles.learners.map(x=>x.nickname)).toEqual(['Anna']);
@@ -120,8 +120,8 @@ test('expired session sends parent back to login and blocks family view',async({
  db.active=null;
  await page.reload();
  await expect(page).toHaveURL(/\/login$/);
- await expect(page.locator('.family-learner')).toHaveCount(0);
+ await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toHaveCount(0);
  await signIn(page,'parentalice');
  await page.goto('/#family');
- await expect(page.locator('.family-learner')).toContainText('Mia');
+ await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Mia');
 });
