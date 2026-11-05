@@ -13,7 +13,7 @@ export function readToken(request){const cookie=request.headers.get('Cookie')||'
 export function sessionCookie(token,maxAge=SESSION_MS/1000){return `${COOKIE}=${token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`}
 export function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra}})}
 
-const EMAIL_PATTERN=/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+const EMAIL_PATTERN=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TOKEN_LIFETIME=30*60*1000;
 const PUBLIC_AUTH_RESPONSE={ok:true,message:'If the email belongs to an account, instructions will be sent.'};
 async function sendAccountEmail(env,email,subject,link){
