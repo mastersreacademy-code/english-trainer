@@ -54,7 +54,7 @@ test('unfinished review blocks return to parent and sign-out, preserving each ch
  expect(db.signouts).toBe(0);
  expect(await draft(page,first)).toBeTruthy();
  expect(await draft(page,second)).toBeNull();
- db.failWrites=false;await page.reload();
+ db.failWrites=false;await page.reload();await page.getByRole('button',{name:'Return to family profiles'}).click();await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();await page.locator('[data-open-learner="'+first+'"]').click();
  await expect.poll(()=>db.children[first].state.reviewHistory.length).toBe(1);
  await expect.poll(()=>draft(page,first)).toBeNull();
  await page.getByRole('button',{name:'Sign out'}).click();
@@ -85,7 +85,7 @@ test('child scores and backup drafts are isolated across profile switching and l
  await page.locator('#password').fill('samplepassword');
  await page.locator('#auth-submit').click();
  await expect(page.getByRole('button',{name:'Sign out'})).toBeVisible();
- await enter(page,first);
+ await page.getByRole('link',{name:/Family profiles/}).click();await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();await page.locator('[data-open-learner="'+first+'"]').click();await expect(page.getByRole('button',{name:'Khôi phục bài ôn'})).toBeVisible();
  expect(db.children[first].state.reviewHistory).toHaveLength(1);
  expect(db.children[second].state.reviewHistory).toHaveLength(0);
 });
