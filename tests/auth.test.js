@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import worker from '../worker/router.js';
 import {FamilyAuth,COOKIE,digest,passwordHash,constantEqual,readToken} from '../worker/auth.js';
-class MemoryStorage{data=new Map();alarm=null;async get(k){return structuredClone(this.data.get(k))}async put(k,v){this.data.set(k,structuredClone(v))}async delete(k){return this.data.delete(k)}async list({prefix='',limit=Infinity}={}){return new Map([...this.data].filter(([k])=>k.startsWith(prefix)).slice(0,limit).map(([k,v])=>[k,structuredClone(v)]))}async getAlarm(){return this.alarm}async setAlarm(v){this.alarm=v}}
+class MemoryStorage{data=new Map();alarm=null;async get(k){return structuredClone(this.data.get(k))}async put(k,v){this.data.set(k,structuredClone(v))}async delete(k){return this.data.delete(k)}async transaction(fn){const original=this.data;const draft=new Map([...original].map(([k,v])=>[k,structuredClone(v)]));this.data=draft;try{const result=await fn(this);return result}catch(error){this.data=original;throw error}}async list({prefix='',limit=Infinity}={}){return new Map([...this.data].filter(([k])=>k.startsWith(prefix)).slice(0,limit).map(([k,v])=>[k,structuredClone(v)]))}async getAlarm(){return this.alarm}async setAlarm(v){this.alarm=v}}
 class Context{storage=new MemoryStorage();tail=Promise.resolve();blockConcurrencyWhile(fn){const work=this.tail.then(fn);this.tail=work.catch(()=>{});return work}}
 const origin='https://english.test',password='Test-only family passphrase 123!',token='a'.repeat(64);
 async function fixture(){const ctx=new Context(),env={SETUP_TOKEN_HASH:await digest(token)},auth=new FamilyAuth(ctx,env);env.FAMILY_AUTH={getByName:()=>auth};env.ASSETS={fetch:async req=>new Response('ASSET:'+new URL(req.url).pathname)};return{ctx,env,auth}}
@@ -25,3 +25,79 @@ test('private workspace rejects unsigned, cross-origin, missing-CSRF and invalid
 test('stale revisions cannot overwrite a newer private workspace',async()=>{const f=await activated(),a=await register(f,'alice');const write=state=>f.auth.fetch(req('/api/workspace',{accountId:a.accountId,revision:0,state},a.cookie,a.csrf));assert.equal((await write(personalState('business'))).status,200);assert.equal((await write(personalState('travel'))).status,409);const result=await(await f.auth.fetch(req('/api/workspace',undefined,a.cookie))).json();assert.equal(result.state.profile.goal,'business');assert.equal(result.revision,1)});
 test('changing one password preserves other accounts and their sessions',async()=>{const f=await activated(),a=await register(f,'alice'),b=await register(f,'bob');const result=await f.auth.fetch(req('/api/auth/password',{currentPassword:password,newPassword:'New Alice password for tests 987!'},a.cookie,a.csrf));assert.equal(result.status,200);assert.equal((await f.auth.fetch(req('/internal/verify',undefined,a.cookie))).status,401);assert.equal((await f.auth.fetch(req('/internal/verify',undefined,b.cookie))).status,200);assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'bob',password}))).status,200)});
 test('pre-upgrade owner sessions retain access without exposing the owner workspace to new accounts',async()=>{const f=await activated(),key='session:'+await digest(f.cookie.split('=')[1]),old=await f.ctx.storage.get(key);delete old.accountId;delete old.username;await f.ctx.storage.put(key,old);const owner=await(await f.auth.fetch(req('/api/auth/session',undefined,f.cookie))).json();assert.equal(owner.accountId,'legacy');assert.equal(owner.legacy,true);const a=await register(f,'alice');assert.equal(a.legacy,false);const blank=await(await f.auth.fetch(req('/api/workspace',undefined,a.cookie))).json();assert.equal(blank.state,null)});
+
+const childA='child0001',childB='child0002';
+const child=(id,nickname,grade)=>({id,nickname,grade,subjects:['english']});
+const family=(learners,activeId=learners[0]?.id??null)=>({version:1,activeId,learners});
+async function familySetup(){
+ const f=await activated(),a=await register(f,'familytest'),b=await register(f,'outsider');
+ const profiles=family([child(childA,'Mia',5),child(childB,'Anna',1)]);
+ const result=await worker.fetch(req('/api/learners',{accountId:a.accountId,revision:0,profiles},a.cookie,a.csrf),f.env);
+ assert.equal(result.status,200);
+ const state=personalState('grade5');state.reviewHistory=[{date:'2026-11-05',grade:5,correct:2,total:3}];
+ assert.equal((await worker.fetch(req('/api/learner-workspace',{accountId:a.accountId,learnerId:childA,revision:0,state},a.cookie,a.csrf),f.env)).status,200);
+ return {...f,a,b,profiles};
+}
+const removal=(a,revision=1,learnerId=childA,confirmed=true)=>({accountId:a.accountId,revision,learnerId,confirmed});
+test('learner deletion rejects unauthenticated, expired session, wrong CSRF, origin and owner',async()=>{
+ const f=await familySetup(),body=removal(f.a);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body),f.env)).status,401);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body,f.a.cookie),f.env)).status,403);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body,f.a.cookie,'bad-csrf'),f.env)).status,403);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body,f.a.cookie,f.a.csrf,'https://attacker.test'),f.env)).status,403);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body,f.b.cookie,f.b.csrf),f.env)).status,403);
+ assert.equal((await worker.fetch(req('/api/learners/delete',{...body,confirmed:'true'},f.a.cookie,f.a.csrf),f.env)).status,400);
+ assert.equal((await worker.fetch(req('/api/learners/delete',{...body,confirmed:false},f.a.cookie,f.a.csrf),f.env)).status,400);
+ const sessionKey='session:'+await digest(f.a.cookie.split('=')[1]);
+ const session=await f.ctx.storage.get(sessionKey);session.expires=0;await f.ctx.storage.put(sessionKey,session);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body,f.a.cookie,f.a.csrf),f.env)).status,401);
+ assert.ok(await f.ctx.storage.get('learner-workspace:'+f.a.accountId+':'+childA));
+ assert.equal((await f.ctx.storage.get('learners:'+f.a.accountId)).profiles.learners.length,2);
+});
+test('confirmed deletion is atomic and repeated or stale requests cannot delete another child',async()=>{
+ const f=await familySetup(),body=removal(f.a);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body,f.a.cookie,f.a.csrf),f.env)).status,200);
+ assert.equal((await worker.fetch(req('/api/learners/delete',body,f.a.cookie,f.a.csrf),f.env)).status,409);
+ assert.equal((await worker.fetch(req('/api/learners/delete',removal(f.a,2,childA),f.a.cookie,f.a.csrf),f.env)).status,404);
+ assert.equal(await f.ctx.storage.get('learner-workspace:'+f.a.accountId+':'+childA),undefined);
+ const record=await f.ctx.storage.get('learners:'+f.a.accountId);
+ assert.equal(record.revision,2);assert.deepEqual(record.profiles.learners.map(x=>x.id),[childB]);
+ assert.equal(record.profiles.activeId,childB);
+ assert.equal((await worker.fetch(req('/api/learner-workspace?learnerId='+childA,undefined,f.a.cookie),f.env)).status,404);
+ assert.equal((await worker.fetch(req('/api/learner-workspace?learnerId='+childB,undefined,f.a.cookie),f.env)).status,200);
+});
+test('two devices editing same revision cannot overwrite each other or remove progress via generic PUT',async()=>{
+ const f=await familySetup();
+ const edited=family([child(childA,'Mia new',6),child(childB,'Anna',1)]);
+ const competing=family([child(childA,'Mia old',2),child(childB,'Anna',1)]);
+ const results=await Promise.all([
+  worker.fetch(req('/api/learners',{accountId:f.a.accountId,revision:1,profiles:edited},f.a.cookie,f.a.csrf),f.env),
+  worker.fetch(req('/api/learners',{accountId:f.a.accountId,revision:1,profiles:competing},f.a.cookie,f.a.csrf),f.env)
+ ]);
+ assert.deepEqual(results.map(x=>x.status).sort(),[200,409]);
+ const latest=await(await worker.fetch(req('/api/learners',undefined,f.a.cookie),f.env)).json();
+ assert.equal(latest.revision,2);
+ assert.equal(latest.profiles.learners.length,2);
+ assert.ok(['Mia new','Mia old'].includes(latest.profiles.learners[0].nickname));
+ assert.equal((await worker.fetch(req('/api/learners',{accountId:f.a.accountId,revision:2,profiles:family([child(childB,'Anna',1)],childB)},f.a.cookie,f.a.csrf),f.env)).status,400);
+ assert.ok(await f.ctx.storage.get('learner-workspace:'+f.a.accountId+':'+childA));
+ assert.equal((await worker.fetch(req('/api/learners/delete',removal(f.a,1),f.a.cookie,f.a.csrf),f.env)).status,409);
+});
+test('concurrent delete and edit serialize: only one succeeds, unrelated child remains',async()=>{
+ const f=await familySetup(),edit=family([child(childA,'Mia renamed',7),child(childB,'Anna',1)]);
+ const responses=await Promise.all([
+  worker.fetch(req('/api/learners/delete',removal(f.a),f.a.cookie,f.a.csrf),f.env),
+  worker.fetch(req('/api/learners',{accountId:f.a.accountId,revision:1,profiles:edit},f.a.cookie,f.a.csrf),f.env)
+ ]);
+ assert.deepEqual(responses.map(x=>x.status).sort(),[200,409]);
+ const latest=await(await worker.fetch(req('/api/learners',undefined,f.a.cookie),f.env)).json();
+ assert.equal(latest.revision,2);
+ assert.equal(latest.profiles.learners.some(x=>x.id===childB),true);
+ if(responses[0].status===200){
+  assert.equal(latest.profiles.learners.some(x=>x.id===childA),false);
+  assert.equal(await f.ctx.storage.get('learner-workspace:'+f.a.accountId+':'+childA),undefined);
+ }else{
+  assert.equal(latest.profiles.learners.find(x=>x.id===childA).nickname,'Mia renamed');
+  assert.ok(await f.ctx.storage.get('learner-workspace:'+f.a.accountId+':'+childA));
+ }
+});
