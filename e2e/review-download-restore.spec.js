@@ -28,7 +28,7 @@ function backend(page,{signedIn=true,sharedDb=null}={}){
 async function openChild(page){await page.goto('/');await page.getByRole('link',{name:/Family profiles/}).click();await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();await page.getByRole('button',{name:'Start learning'}).click();await expect(page.getByRole('button',{name:'Khôi phục bài ôn'})).toBeVisible()}
 
 import {dateKey} from '../public/learning.js';
-const account='parent1',learner='child0001';
+const account='parent1',learner='child0001',child=learner;
 function seed(db){
  db.child.state.words=[
   {word:'apple',meaning:'quả táo',example:'An apple a day.',due:'2020-01-01'},
