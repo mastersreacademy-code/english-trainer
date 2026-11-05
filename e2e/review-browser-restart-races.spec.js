@@ -35,10 +35,10 @@ async function open(page){
  await page.getByRole('button',{name:'Start learning'}).click();
  await expect(page.getByRole('button',{name:'Khôi phục bài ôn'})).toBeVisible();
 }
-async function finish(page){
+async function finish(page,answerIndex=0){
  await page.goto('/#daily-review');
  await expect(page.getByRole('heading',{name:'Today’s Review'})).toBeVisible();
- for(let i=0;i<3;i++)await page.locator('[data-review-answer]').first().click();
+ for(let i=0;i<3;i++)await page.locator('[data-review-answer]').nth(answerIndex).click();
  await expect(page.getByRole('heading',{name:'Review complete!'})).toBeVisible();
 }
 async function local(page){return page.evaluate(key=>localStorage.getItem(key),key)}
@@ -66,7 +66,7 @@ test('two browser devices race to save one learner: winner stays online, loser r
   const first=await a.newPage(),second=await b.newPage();await attach(first,db);await attach(second,db);
   await open(first);await open(second);
   db.delayMs=300;
-  await Promise.all([finish(first),finish(second)]);
+  await Promise.all([finish(first,0),finish(second,2)]);
   await expect.poll(()=>db.conflicts).toBe(1);
   await expect.poll(()=>db.writes).toBe(1);
   expect(db.learner.state.reviewHistory).toHaveLength(1);
