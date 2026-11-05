@@ -40,7 +40,7 @@ async function finishReview(page){
  await page.goto('/#daily-review');
  await expect(page.getByRole('heading',{name:'Today’s Review'})).toBeVisible();
  for(let i=0;i<3;i++){
-  await expect(page.locator('[data-review-answer]')).toHaveCount(4);
+  await expect(page.locator('[data-review-answer]')).toHaveCount(3);
   await page.locator('[data-review-answer]').first().click();
  }
  await expect(page.getByRole('heading',{name:'Review complete!'})).toBeVisible();
