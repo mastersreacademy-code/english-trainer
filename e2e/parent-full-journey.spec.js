@@ -101,3 +101,36 @@ test('multiple learners retain distinct grade and review history when one is rem
  expect(db.profiles.learners[0]).toMatchObject({id:anna.id,nickname:'Anna',grade:1});
  expect(db.children[anna.id].state.reviewHistory).toHaveLength(0);
 });
+
+test('parent edits child name and class without resetting review progress',async({page,isMobile})=>{
+ const db=fixture();await mock(page,db);await page.goto('/#family');
+ await page.locator('#learner-nickname').fill('Mia');
+ await page.locator('#learner-grade').selectOption('5');
+ await page.locator('#add-learner button[type="submit"]').click();
+ await expect(page.locator('[data-edit-learner]')).toHaveCount(1);
+ const id=db.profiles.learners[0].id;
+ db.children[id].state.reviewHistory.push({date:'2026-11-05',grade:5,total:3,correct:2});
+ await page.locator('[data-edit-learner="'+id+'"]').click();
+ await page.locator('[data-edit-form="'+id+'"] input[name="nickname"]').fill('Mia Updated');
+ await page.locator('[data-edit-form="'+id+'"] select[name="grade"]').selectOption('6');
+ await page.locator('[data-edit-form="'+id+'"] button[type="submit"]').click();
+ await expect(page.locator('[data-edit-form]')).toHaveCount(0);
+ expect(db.profiles.learners[0]).toMatchObject({id,nickname:'Mia Updated',grade:6});
+ expect(db.children[id].state.reviewHistory).toHaveLength(1);
+ await expect(page.locator('[data-review-summary="'+id+'"]')).toContainText('Latest review: 2/3');
+ await page.reload();
+ await expect(page.locator('.family-learner')).toContainText(['Mia Updated','Class 6']);
+ if(isMobile){const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));expect(size.scroll).toBeLessThanOrEqual(size.width+2)}
+});
+test('unfinished local review backup prevents permanent child deletion',async({page})=>{
+ const db=fixture();await mock(page,db);await page.goto('/#family');
+ await page.locator('#learner-nickname').fill('Mia');
+ await page.locator('#add-learner button[type="submit"]').click();
+ await expect(page.locator('[data-delete-learner]')).toHaveCount(1);
+ const id=db.profiles.learners[0].id;
+ await page.evaluate(({account,id})=>localStorage.setItem('family-learning-review-draft-v1:'+account+':'+id,'unsynced'),{account,id});
+ await page.locator('[data-delete-learner="'+id+'"]').click();
+ await expect(page.locator('#family-error')).toContainText('Resolve or export the unfinished review');
+ expect(db.profiles.learners).toHaveLength(1);
+ expect(db.children[id]).toBeDefined();
+});
