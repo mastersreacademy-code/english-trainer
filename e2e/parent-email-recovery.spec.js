@@ -22,7 +22,7 @@ test('parent email verification, reset request and password recovery UI',async({
  await expect(page.locator('#auth-message')).toContainText('Check your email');
  expect(inbox).toEqual(['verify']);
  await page.goto('/login#verify='+ 'a'.repeat(64));
- await expect(page.getByRole('button',{name:'Verify email'})).toBeVisible();
+ await expect(page.locator('#auth-submit')).toContainText('Verify email');
  await page.locator('#auth-submit').click();
  await expect(page.locator('#auth-message')).toContainText('Success');
  await page.getByRole('button',{name:'Forgot password?'}).click();
