@@ -47,6 +47,7 @@ async function register(page,name){
  await expect(page.getByRole('button',{name:'New here? Create an account'})).toBeVisible();
  await page.getByRole('button',{name:'New here? Create an account'}).click();
  await page.locator('#username').fill(name);
+ await page.locator('#email').fill(name+'@example.test');
  await page.locator('#password').fill('Secure family passphrase 123!');
  await page.locator('#password-confirm').fill('Secure family passphrase 123!');
  await page.locator('#auth-submit').click();
