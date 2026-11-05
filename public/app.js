@@ -40,7 +40,7 @@ function clearSession(){active=null;try{sessionStorage.removeItem(accountSession
 function startingCard(){const child=isChild(state.profile.goal);return `<section class="insight-card card"><span class="insight-icon">${icon('compass')}</span><div><span class="eyebrow">${child?'A LITTLE HELP GOES A LONG WAY':'YOUR STARTING POINT'}</span><h2>${child?'Learn together, one small step.':!state.assessment?'A little clarity goes a long way.':'Keep building your confidence.'}</h2><p>${child?(state.profile.goal==='grade1'?'Listen together, repeat a word and copy it. A grown-up can help with the buttons.':'Read, listen, explain an answer and write a few sentences. Adjust the daily time in Preferences.'):'Six short questions can help choose your starting difficulty.'}</p><a class="text-link" href="${child?'#plan':'#check'}">${child?'Explore my school plan':'Check my level'} ${icon('arrow')}</a></div></section>`}
 function go(page){if(location.hash==='#'+page)render();else location.hash=page}
 function stopMedia(){clearInterval(timer);timer=null;clearTimeout(recordTimeout);if(recorder?.state==='recording')recorder.stop();recordStream?.getTracks().forEach(t=>t.stop());recordStream=null;if('speechSynthesis'in window)speechSynthesis.cancel()}
-function header(){return `<div class="top"><div class="header-context"><span class="header-brand">YOUR LEARNING JOURNAL</span><span data-current-date>${new Date().toLocaleDateString(locale(),{weekday:'long',month:'short',day:'numeric'})}</span></div><div class="header-tools">${languageControl()}<button class="appearance-button" id="appearance-open" aria-haspopup="dialog">${icon('sun')}<span>Appearance</span></button><button class="signout-button" id="signout">Sign out</button></div></div>`}
+function header(){return `<div class="top"><div class="header-context"><span class="header-brand">YOUR LEARNING JOURNAL</span><span data-current-date>${new Date().toLocaleDateString(locale(),{weekday:'long',month:'short',day:'numeric'})}</span></div><div class="header-tools">${languageControl()}<button class="appearance-button" id="appearance-open" aria-haspopup="dialog">${icon('sun')}<span>Appearance</span></button><button class="signout-button" id="signout">Sign out</button>${currentLearner?'<button type="button" id="review-backup-open">Khôi phục bài ôn</button>':''}</div></div>`}
 function speak(text){if(!('speechSynthesis'in window)){notify('Voice playback is unavailable on this device. You can read the transcript instead.');return}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='en-AU';u.rate=state.speed;speechSynthesis.speak(u)}
 function setup(){const goal=state.profile?.goal||'conversation';app.innerHTML=header()+`<div class="setup-intro"><div><span class="eyebrow">YOUR PERSONAL PLAN</span><h1>Your next chapter<br>starts here.</h1><p>Choose a path for your school year, a skill to strengthen, or the work you do.</p></div>${scene(goal,'setup-scene')}</div><form id="setup" class="card form"><label for="name">Display name</label><input id="name" name="name" required maxlength="40" value="${esc(state.profile?.name||'')}"><label for="goal">Learning plan</label><select id="goal" name="goal">${planGroups.filter(([g])=>g!=='all').map(([group,label])=>`<optgroup label="${label}">${plans.filter(p=>p.group===group).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('')}</select><p><a href="#library">Preview and compare all plans →</a></p><label for="level">Practice support</label><select id="level" name="level"><option value="beginner">Guided — shorter speaking and writing</option><option value="intermediate">Stretch — longer answers and reasons</option></select><label for="minutes">Daily practice target</label><select id="minutes" name="minutes">${['5','10','15','20','30'].map(m=>`<option value="${m}">${m} minutes</option>`).join('')}</select><p class="small">Each plan keeps its own session position. Your saved words, writing and daily history stay in your workspace.</p><button>Save preferences</button></form>`;
 if(state.profile)for(const k of['goal','level','minutes'])$(`[name=${k}]`).value=state.profile[k];
@@ -226,12 +226,12 @@ function showLearnerExitRecovery(error){
  if(!currentLearner)return notify(error.message);
  const panel=document.createElement('section');panel.id='learner-exit-recovery';panel.className='card';panel.setAttribute('role','alert');
  panel.style.cssText='border:2px solid var(--accent,#64748b);margin:16px 0;padding:16px';
- const heading=document.createElement('h2');heading.textContent='Review not yet safely saved';
+ const heading=document.createElement('h2');heading.textContent='Khôi phục kết quả ôn tập / Review recovery';
  const detail=document.createElement('p');detail.textContent=error.message||'Unable to verify saved progress. Stay on this learner until the review is resolved.';
  const actions=document.createElement('div');actions.className='actions';
- const retry=document.createElement('button');retry.type='button';retry.textContent='Retry sync';
+ const retry=document.createElement('button');retry.type='button';retry.textContent='Thử đồng bộ lại / Retry sync';
  retry.onclick=async()=>{retry.disabled=true;detail.textContent='Checking saved progress…';try{await accountStore.retry();await ensureLearnerCanExit();panel.remove();notify('Review safely saved. You can now switch profiles or sign out.')}catch(reason){detail.textContent=reason.message||'Unable to sync. Keep your local draft and try again.';retry.disabled=false}};
- const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Export review backup';
+ const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Tải bản sao / Export backup';
  exportButton.onclick=()=>{
   const key=reviewDraftKey(familyAccount.accountId,currentLearner.id);
   let raw;
@@ -240,8 +240,8 @@ function showLearnerExitRecovery(error){
   const link=document.createElement('a');link.href=url;link.download='family-learning-review-'+currentLearner.id+'.json';link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  };
- const importLabel=document.createElement('label');importLabel.textContent='Import review backup (JSON)';
- const importInput=document.createElement('input');importInput.type='file';importInput.accept='.json,application/json';importInput.setAttribute('aria-label','Import review backup JSON');
+ const importLabel=document.createElement('label');importLabel.textContent='Nhập bản sao JSON của đúng trẻ / Import review backup';
+ const importInput=document.createElement('input');importInput.type='file';importInput.accept='.json,application/json';importInput.setAttribute('aria-label','Chọn tệp sao lưu kết quả ôn tập JSON');
  importInput.onchange=async()=>{
   const file=importInput.files?.[0];if(!file)return;
   const learnerId=currentLearner.id;
@@ -258,7 +258,8 @@ function showLearnerExitRecovery(error){
   finally{importInput.disabled=false;importInput.value=''}
  };
  importLabel.append(importInput);
- actions.append(retry,exportButton);panel.append(heading,detail,actions,importLabel);app.before(panel);
+ const guide=document.createElement('p');guide.className='small';guide.textContent='Hướng dẫn: 1. Tải bản sao JSON để giữ an toàn. 2. Chọn đúng hồ sơ trẻ rồi nhập tệp. 3. Tải lại trang để kiểm tra và khôi phục. Nếu có xung đột, dữ liệu trên mạng không bị ghi đè.';
+ actions.append(retry,exportButton);panel.append(heading,detail,guide,actions,importLabel);app.before(panel);
 }
 async function ensureLearnerCanExit(){
  if(!currentLearner)return;
@@ -325,7 +326,7 @@ async function familyDashboard(){
 }
 function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';if(currentLearner&&page==='family'){app.innerHTML=header()+'<h1>Learning as '+esc(currentLearner.nickname)+'</h1><p>Save this learner’s progress before returning to the parent account.</p><button id="return-to-parent">Return to family profiles</button><p id="return-error" role="status"></p>';on('#return-to-parent',async()=>{const button=$('#return-to-parent');button.disabled=true;try{await returnToParentWorkspace()}catch(error){$('#return-error').textContent=error.message;showLearnerExitRecovery(error);button.disabled=false}});return}document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(page==='family'){familyDashboard();window.scrollTo(0,0);return}if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,'daily-review':todaysReview,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
 
-document.addEventListener('click',async e=>{if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{if(currentLearner)await ensureLearnerCanExit();else await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){showLearnerExitRecovery(error);button.disabled=false}return}});
+document.addEventListener('click',async e=>{if(e.target.closest('#review-backup-open')){showLearnerExitRecovery(new Error('Chọn tệp sao lưu của đúng hồ sơ trẻ. Tệp chỉ được lưu tạm; tải lại trang để kiểm tra trước khi khôi phục.'));return}if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{if(currentLearner)await ensureLearnerCanExit();else await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){showLearnerExitRecovery(error);button.disabled=false}return}});
 document.querySelector('.skip-link')?.addEventListener('click',e=>{e.preventDefault();app.focus()});
 document.querySelectorAll('[data-nav-icon]').forEach(el=>el.innerHTML=icon(el.dataset.navIcon));
 document.querySelector('#release-version').textContent='Version '+buildInfo.version;
