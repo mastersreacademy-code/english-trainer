@@ -190,3 +190,10 @@ test('forgot password is non-enumerating, single-use, expiring and revokes all s
  record.expires=Date.now()-1;await f.ctx.storage.put(key,record);
  assert.equal((await f.auth.fetch(req('/api/auth/reset-password',{token:expired,password:'Another long secure password'}))).status,400);
 });
+
+test('automated registration honeypot rejects submissions without creating accounts',async()=>{
+ const f=await fixture();f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async()=>{throw Error('Email should not be sent')};
+ const response=await f.auth.fetch(req('/api/auth/register',{username:'botparent',email:'bot@example.test',password,website:'https://spam.example'}));
+ assert.equal(response.status,400);
+ assert.equal(await f.ctx.storage.get('user:botparent'),undefined);
+});
