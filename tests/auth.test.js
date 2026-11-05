@@ -101,3 +101,57 @@ test('concurrent delete and edit serialize: only one succeeds, unrelated child r
   assert.ok(await f.ctx.storage.get('learner-workspace:'+f.a.accountId+':'+childA));
  }
 });
+
+test('parent registration, logout and login preserve private data but revoke the old cookie',async()=>{
+ const f=await activated(),a=await register(f,'parentalice');
+ const state={...personalState('grade5'),drafts:{familyNote:'Alice only'}};
+ assert.equal((await worker.fetch(req('/api/workspace',{accountId:a.accountId,revision:0,state},a.cookie,a.csrf),f.env)).status,200);
+ assert.equal((await worker.fetch(req('/api/auth/logout',{},a.cookie,a.csrf),f.env)).status,200);
+ assert.equal((await worker.fetch(req('/api/workspace',undefined,a.cookie),f.env)).status,401);
+ assert.equal((await worker.fetch(req('/api/workspace',{accountId:a.accountId,revision:1,state},a.cookie,a.csrf),f.env)).status,401);
+ const response=await worker.fetch(req('/api/auth/login',{username:'parentalice',password}),f.env);
+ assert.equal(response.status,200);const newCookie=cookieOf(response);assert.notEqual(newCookie,a.cookie);
+ const restored=await(await worker.fetch(req('/api/workspace',undefined,newCookie),f.env)).json();
+ assert.equal(restored.accountId,a.accountId);assert.equal(restored.state.drafts.familyNote,'Alice only');
+});
+test('expired parent session denies all private family reads and writes',async()=>{
+ const f=await familySetup();
+ const key='session:'+await digest(f.a.cookie.split('=')[1]);
+ const session=await f.ctx.storage.get(key);session.expires=Date.now()-1;await f.ctx.storage.put(key,session);
+ for(const path of ['/api/auth/session','/api/workspace','/api/learners','/api/learner-workspace?learnerId='+childA]){
+  assert.equal((await worker.fetch(req(path,undefined,f.a.cookie),f.env)).status,401,path);
+ }
+ const state=personalState('grade5');
+ assert.equal((await worker.fetch(req('/api/workspace',{accountId:f.a.accountId,revision:0,state},f.a.cookie,f.a.csrf),f.env)).status,401);
+ assert.equal((await worker.fetch(req('/api/learners',{accountId:f.a.accountId,revision:1,profiles:f.profiles},f.a.cookie,f.a.csrf),f.env)).status,401);
+ assert.equal((await worker.fetch(req('/api/learner-workspace',{accountId:f.a.accountId,learnerId:childA,revision:1,state},f.a.cookie,f.a.csrf),f.env)).status,401);
+ assert.equal((await f.ctx.storage.get('learners:'+f.a.accountId)).revision,1);
+ assert.equal((await f.ctx.storage.get('learner-workspace:'+f.a.accountId+':'+childA)).revision,1);
+});
+test('family A and B cannot read, update, or delete each others learners or progress',async()=>{
+ const f=await familySetup(),alice=f.a,bob=f.b;
+ const bobProfiles=family([child(childB,'Bob child',2)],childB);
+ assert.equal((await worker.fetch(req('/api/learners',{accountId:bob.accountId,revision:0,profiles:bobProfiles},bob.cookie,bob.csrf),f.env)).status,200);
+ const aliceProfiles=await(await worker.fetch(req('/api/learners',undefined,alice.cookie),f.env)).json();
+ const bobRead=await(await worker.fetch(req('/api/learners',undefined,bob.cookie),f.env)).json();
+ assert.deepEqual(aliceProfiles.profiles.learners.map(x=>x.nickname),['Mia','Anna']);
+ assert.deepEqual(bobRead.profiles.learners.map(x=>x.nickname),['Bob child']);
+ assert.equal((await worker.fetch(req('/api/learner-workspace?learnerId='+childA,undefined,bob.cookie),f.env)).status,404);
+ assert.equal((await worker.fetch(req('/api/learner-workspace',{accountId:alice.accountId,learnerId:childA,revision:1,state:personalState('business')},bob.cookie,bob.csrf),f.env)).status,403);
+ assert.equal((await worker.fetch(req('/api/learners/delete',removal(alice),bob.cookie,bob.csrf),f.env)).status,403);
+ assert.equal((await worker.fetch(req('/api/learners',{accountId:alice.accountId,revision:1,profiles:family([child(childA,'Stolen',1)])},bob.cookie,bob.csrf),f.env)).status,403);
+ const aProgress=await(await worker.fetch(req('/api/learner-workspace?learnerId='+childA,undefined,alice.cookie),f.env)).json();
+ assert.equal(aProgress.state.reviewHistory[0].correct,2);
+ const bProgress=await(await worker.fetch(req('/api/learner-workspace?learnerId='+childB,undefined,bob.cookie),f.env)).json();
+ assert.equal(bProgress.state,null);
+ assert.equal((await f.ctx.storage.get('learners:'+alice.accountId)).revision,1);
+ assert.equal((await f.ctx.storage.get('learners:'+bob.accountId)).revision,1);
+});
+test('duplicate registration and incorrect login do not expose another family',async()=>{
+ const f=await activated(),a=await register(f,'parentalice'),b=await register(f,'parentbob');
+ assert.equal((await worker.fetch(req('/api/auth/register',{username:'PARENTALICE',password}),f.env)).status,409);
+ assert.equal((await worker.fetch(req('/api/auth/login',{username:'parentalice',password:'Wrong password 123'}),f.env)).status,401);
+ assert.equal((await worker.fetch(req('/api/auth/login',{username:'missing-parent',password}),f.env)).status,401);
+ assert.equal((await worker.fetch(req('/api/auth/session',undefined,a.cookie),f.env)).status,200);
+ assert.equal((await worker.fetch(req('/api/auth/session',undefined,b.cookie),f.env)).status,200);
+});
