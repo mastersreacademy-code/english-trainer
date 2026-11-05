@@ -51,7 +51,7 @@ test('closing all pages and reopening same persistent browser context recovers o
   const saved=await local(first);expect(saved).toBeTruthy();
   await first.close();expect(db.learner.state.reviewHistory).toHaveLength(0);
   db.blockWrites=false;
-  const reopened=await context.newPage();await attach(reopened,db);await reopened.goto('/');
+  const reopened=await context.newPage();await attach(reopened,db);await open(reopened);
   await expect.poll(()=>db.learner.state.reviewHistory.length).toBe(1);
   await expect.poll(()=>local(reopened)).toBeNull();
   expect(db.learner.state.reviewHistory[0]).toMatchObject({date:dateKey(),grade:5,total:3});
