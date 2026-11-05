@@ -14,7 +14,7 @@ import {plans,planGroups,planFor,filterPlans} from './plan-library.js';
 import {requireSession,signOut,changePassword,workspaceApi,learnerProfilesApi,learnerWorkspaceApi} from './session.js';
 import {buildInfo} from './version.js';
 import {familyKey,isChild} from './family.js';
-import {addLearner,chooseLearner,deleteLearner} from './learner-profiles.js';
+import {addLearner,chooseLearner,editLearner} from './learner-profiles.js';
 import {subjects} from './subjects.js';
 import {initAppearance} from './appearance.js';
 import {goalDetails,icon,scene} from './visuals.js';
@@ -331,7 +331,34 @@ async function familyDashboard(){
    container.querySelector('#add-learner').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{const id=crypto.randomUUID().replaceAll('-','');await persist(addLearner(record.profiles,{nickname:form.elements.nickname.value,grade:Number(form.elements.grade.value),subjects:['english']},id))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}};
    container.querySelectorAll('[data-select-learner]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await persist(chooseLearner(record.profiles,button.dataset.selectLearner))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
    container.querySelectorAll('[data-open-learner]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{const learner=record.profiles.learners.find(item=>item.id===button.dataset.openLearner);if(!learner)throw Error('Learner not found');await openLearnerWorkspace(learner)}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
-   container.querySelectorAll('[data-delete-learner]').forEach(button=>button.onclick=async()=>{if(button.dataset.confirmRemove!=='yes'){button.dataset.confirmRemove='yes';button.textContent='Confirm remove';button.setAttribute('aria-label','Confirm removal of this child profile');return}button.disabled=true;try{await persist(deleteLearner(record.profiles,button.dataset.deleteLearner))}catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}});
+   container.querySelectorAll('[data-edit-learner]').forEach(button=>button.onclick=()=>{
+    const learner=record.profiles.learners.find(item=>item.id===button.dataset.editLearner);
+    if(!learner)return;
+    const panel=document.createElement('form');panel.className='card form';panel.setAttribute('data-edit-form',learner.id);
+    panel.innerHTML='<h3>Edit '+esc(learner.nickname)+'</h3><label>Nickname<input name="nickname" maxlength="40" required value="'+esc(learner.nickname)+'"></label><label>Class level<select name="grade">'+Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'" '+(learner.grade===i+1?'selected':'')+'>Class '+(i+1)+'</option>').join('')+'</select></label><div class="actions"><button type="submit">Save changes</button><button type="button" class="secondary" data-cancel-edit>Cancel</button></div>';
+    container.querySelector('[data-edit-form]')?.remove();
+    button.closest('.family-learner').after(panel);
+    panel.querySelector('[data-cancel-edit]').onclick=()=>panel.remove();
+    panel.onsubmit=async event=>{event.preventDefault();const submit=panel.querySelector('[type="submit"]');submit.disabled=true;try{await persist(editLearner(record.profiles,learner.id,{nickname:panel.elements.nickname.value,grade:Number(panel.elements.grade.value)}))}catch(error){container.querySelector('#family-error').textContent=error.message;submit.disabled=false}};
+   });
+   container.querySelectorAll('[data-delete-learner]').forEach(button=>button.onclick=async()=>{
+    const id=button.dataset.deleteLearner,learner=record.profiles.learners.find(item=>item.id===id);
+    if(!learner)return;
+    if(localStorage.getItem(reviewDraftKey(familyAccount.accountId,id))!==null){container.querySelector('#family-error').textContent='Resolve or export the unfinished review for '+learner.nickname+' before removing this profile.';return}
+    if(button.dataset.confirmRemove!=='yes'){
+     button.dataset.confirmRemove='yes';button.textContent='Confirm remove';button.setAttribute('aria-label','Confirm removal of this child profile');
+     container.querySelector('#family-error').textContent='Removing '+learner.nickname+' permanently deletes this child’s saved learning progress. Click Confirm remove again to continue.';
+     return;
+    }
+    button.disabled=true;
+    try{
+     const result=await learnerProfilesApi.remove(record.revision,id);
+     if(result.accountId!==familyAccount.accountId||!result.profiles||result.profiles.learners.some(item=>item.id===id))throw Error('Deletion response could not be verified');
+     record={...record,revision:result.revision,profiles:result.profiles};
+     sessionStorage.removeItem('english-active-learner:'+familyAccount.accountId);
+     draw();notify('Learner and saved learning progress removed.');
+    }catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}
+   });
   }
   draw();
  }catch(error){container.innerHTML='<p>Could not load family profiles. Your existing learning data is safe.</p><p class="small">'+esc(error.message)+'</p><button id="family-retry">Try again</button>';on('#family-retry',familyDashboard)}
