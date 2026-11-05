@@ -15,6 +15,14 @@ async function mock(page,db){
   const req=route.request(),url=new URL(req.url()),path=url.pathname,post=req.method()==='POST',body=post?req.postDataJSON():null;
   const send=(value,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)});
   if(path==='/api/auth/session')return send({authenticated:true,accountId:account,username:'Parent',csrf:'test-token'});
+  if(path==='/api/learners/delete'){
+   if(!body.confirmed||body.revision!==db.profilesRevision)return send({error:'Invalid deletion'},409);
+   if(!db.profiles.learners.some(item=>item.id===body.learnerId))return send({error:'Unknown learner'},404);
+   db.profiles.learners=db.profiles.learners.filter(item=>item.id!==body.learnerId);
+   if(db.profiles.activeId===body.learnerId)db.profiles.activeId=db.profiles.learners[0]?.id??null;
+   delete db.children[body.learnerId];db.profilesRevision++;
+   return send({accountId:account,revision:db.profilesRevision,profiles:structuredClone(db.profiles)});
+  }
   if(path==='/api/learners'){
    if(post){
     if(body.revision!==db.profilesRevision)return send({error:'Conflict'},409);
@@ -69,7 +77,7 @@ test('parent creates grade-5 child, completes review, checks dashboard, and conf
  await page.locator('[data-delete-learner="'+id+'"]').click();
  await expect(page.locator('[data-open-learner]')).toHaveCount(0);
  expect(db.profiles.learners).toHaveLength(0);
- expect(db.children[id].state.reviewHistory).toHaveLength(1);
+ expect(db.children[id]).toBeUndefined();
  expect(db.parent.state.reviewHistory).toHaveLength(0);
  if(isMobile){const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));expect(size.scroll).toBeLessThanOrEqual(size.width+2)}
 });
