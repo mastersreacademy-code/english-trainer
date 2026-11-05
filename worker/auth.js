@@ -12,12 +12,22 @@ export function validPassword(value){return typeof value==='string'&&value.lengt
 export function readToken(request){const cookie=request.headers.get('Cookie')||'';const values=cookie.split(';').map(x=>x.trim()).filter(x=>x.startsWith(COOKIE+'='));if(values.length!==1)return null;const token=values[0].slice(COOKIE.length+1);return /^[a-f0-9]{64}$/.test(token)?token:null}
 export function sessionCookie(token,maxAge=SESSION_MS/1000){return `${COOKIE}=${token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`}
 export function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra}})}
+
+const EMAIL_PATTERN=/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+const TOKEN_LIFETIME=30*60*1000;
+const PUBLIC_AUTH_RESPONSE={ok:true,message:'If the email belongs to an account, instructions will be sent.'};
+async function sendAccountEmail(env,email,subject,link){
+ if(!env.EMAIL_API_KEY||!env.EMAIL_FROM)throw Error('Email delivery is not configured');
+ const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+env.EMAIL_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[email],subject,text:subject+'\\n\\nOpen this link to continue: '+link+'\\n\\nThis link expires in 30 minutes. If you did not request it, ignore this message.'})});
+ if(!response.ok)throw Error('Email delivery failed');
+}
 export class FamilyAuth {
 constructor(ctx,env){this.ctx=ctx;this.env=env;this.storage=ctx.storage}
 fetch(request){return this.ctx.blockConcurrencyWhile(()=>this.handle(request))}
 async session(request){const token=readToken(request);if(!token)return null;const key='session:'+await digest(token),session=await this.storage.get(key);if(!session)return null;if(session.expires<=Date.now()){await this.storage.delete(key);return null}return{...session,key}}
 async scheduleCleanup(){if(!await this.storage.getAlarm())await this.storage.setAlarm(Date.now()+60*60*1000)}
 async rateAllowed(request){const now=Date.now();let global=await this.storage.get('rate:global');if(!global||global.expires<=now)global={count:0,expires:now+15*60*1000};if(global.count>=30)return false;global.count++;await this.storage.put('rate:global',global);const key='rate:'+await digest(request.headers.get('X-Auth-Client-IP')||'unknown');let local=await this.storage.get(key);if(!local||local.expires<=now)local={count:0,expires:now+15*60*1000};const allowed=local.count<8;local.count=Math.min(local.count+1,8);await this.storage.put(key,local);await this.scheduleCleanup();return allowed}
+async revokeSessions(accountId){const sessions=await this.storage.list({prefix:'session:'});for(const[key,value]of sessions)if((value.accountId||'legacy')===accountId)await this.storage.delete(key)}
 async newSession(account){const token=randomToken(),session={accountId:account.id||'legacy',username:account.username,csrf:randomToken(),created:Date.now(),expires:Date.now()+SESSION_MS};await this.storage.put('session:'+await digest(token),session);const sessions=await this.storage.list({prefix:'session:'});const sorted=[...sessions].filter(([,s])=>(s.accountId||'legacy')===session.accountId).sort((a,b)=>a[1].created-b[1].created);for(const[key]of sorted.slice(0,Math.max(0,sorted.length-20)))await this.storage.delete(key);await this.scheduleCleanup();return json({ok:true,accountId:session.accountId},200,{'Set-Cookie':sessionCookie(token)})}
 async sessionAccount(session){if(!session)return null;if(!session.accountId||session.accountId==='legacy'){const account=await this.storage.get('account');return account?{...account,id:'legacy',legacy:true}:null}const account=await this.storage.get('user:'+session.username);return account?.id===session.accountId?account:null}
 async handle(request){
@@ -56,11 +66,59 @@ if(await this.storage.get('user:'+username))return json({error:'That username is
 const salt=randomToken(),hash=await passwordHash(body.password,salt);await this.storage.put('account',{username,salt,hash,iterations:ITERATIONS,created:Date.now()});return this.newSession({username,id:'legacy'});
 }
 if(path==='/api/auth/register'){
+ if(this.env.EMAIL_API_KEY){
+  if(!this.env.EMAIL_FROM)return json({error:'Email delivery is not configured.'},503);
+  if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
+  const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
+  const email=typeof body.email==='string'?body.email.trim().toLowerCase():'';
+  if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password)||email.length>254||!EMAIL_PATTERN.test(email))return json({error:'Enter a valid email, username and password of at least 12 characters.'},400);
+  if(await this.storage.get('user:'+username)||account?.username===username)return json({error:'That username is unavailable.'},409);
+  if(await this.storage.get('email:'+await digest(email)))return json({error:'This email is already registered.'},409);
+  const salt=randomToken(),user={id:randomToken(),username,email,verified:false,salt,hash:await passwordHash(body.password,salt),iterations:ITERATIONS,created:Date.now()};
+  const token=randomToken(),tokenKey='verify:'+await digest(token);
+  await this.storage.put('user:'+username,user);await this.storage.put('email:'+await digest(email),username);
+  await this.storage.put(tokenKey,{username,expires:Date.now()+TOKEN_LIFETIME});
+  try{await sendAccountEmail(this.env,email,'Verify your Family Learning email',new URL('/login#verify='+token,request.url).href)}
+  catch{await this.storage.delete('user:'+username);await this.storage.delete('email:'+await digest(email));await this.storage.delete(tokenKey);return json({error:'Unable to send verification email. Please try again.'},503)}
+  await this.scheduleCleanup();return json({ok:true,verificationRequired:true},202);
+ }
 if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
 const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
 if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password))return json({error:'Use a 3–40 character username and a password of 12–128 characters.'},400);
 if(account?.username===username||await this.storage.get('user:'+username))return json({error:'That username is unavailable. Choose another one.'},409);
 const salt=randomToken(),user={id:randomToken(),username,salt,hash:await passwordHash(body.password,salt),iterations:ITERATIONS,created:Date.now()};await this.storage.put('user:'+username,user);return this.newSession(user);
+}
+if(path==='/api/auth/verify-email'||path==='/api/auth/reset-password'){
+ if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
+ const token=typeof body.token==='string'?body.token:'';
+ if(!/^[a-f0-9]{64}$/.test(token))return json({error:'Invalid or expired link.'},400);
+ const key=(path==='/api/auth/verify-email'?'verify:':'reset:')+await digest(token);
+ const entry=await this.storage.get(key);
+ if(!entry||entry.expires<=Date.now())return json({error:'Invalid or expired link.'},400);
+ const user=await this.storage.get('user:'+entry.username);
+ if(!user){await this.storage.delete(key);return json({error:'Invalid or expired link.'},400)}
+ if(path==='/api/auth/verify-email'){
+  if(user.verified===true)return json({error:'Link already used.'},400);
+  await this.storage.put('user:'+entry.username,{...user,verified:true});
+  await this.storage.delete(key);return json({ok:true});
+ }
+ if(!validPassword(body.password))return json({error:'Use a password of 12–128 characters.'},400);
+ const salt=randomToken();
+ await this.storage.put('user:'+entry.username,{...user,salt,hash:await passwordHash(body.password,salt),iterations:ITERATIONS});
+ await this.storage.delete(key);await this.revokeSessions(user.id);return json({ok:true});
+}
+if(path==='/api/auth/forgot-password'){
+ if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
+ const email=typeof body.email==='string'?body.email.trim().toLowerCase():'';
+ if(email.length>254||!EMAIL_PATTERN.test(email))return json(PUBLIC_AUTH_RESPONSE);
+ const username=await this.storage.get('email:'+await digest(email)),user=username?await this.storage.get('user:'+username):null;
+ if(user?.verified&&this.env.EMAIL_API_KEY&&this.env.EMAIL_FROM){
+  const token=randomToken(),key='reset:'+await digest(token);
+  await this.storage.put(key,{username,expires:Date.now()+TOKEN_LIFETIME});
+  try{await sendAccountEmail(this.env,email,'Reset your Family Learning password',new URL('/login#reset='+token,request.url).href)}
+  catch{await this.storage.delete(key)}
+ }
+ return json(PUBLIC_AUTH_RESPONSE);
 }
 if(path==='/api/auth/login'){
 if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
@@ -69,6 +127,7 @@ const user=account?.username===username?{...account,id:'legacy',legacy:true}:(/^
 if(!user&&!account){await passwordHash(password,'unavailable-account');return json({error:'Username or password is incorrect.'},401)}
 const hash=await passwordHash(password,user?.salt||'unavailable-account',user?.iterations||ITERATIONS);
 if(!user||!constantEqual(hash,user.hash))return json({error:'Username or password is incorrect.'},401);
+if(user.verified===false)return json({error:'Please verify your email before signing in.'},403);
 return this.newSession(user);
 }
 if(path==='/api/learners/delete'){
@@ -141,5 +200,5 @@ const salt=randomToken();await this.storage.put(owner.id==='legacy'?'account':'u
 }
 return json({error:'Not found.'},404);
 }
-async alarm(){const now=Date.now();for(const prefix of ['session:','rate:']){const values=await this.storage.list({prefix});for(const[key,value]of values)if(value.expires<=now)await this.storage.delete(key)}const sessions=await this.storage.list({prefix:'session:',limit:1}),rates=await this.storage.list({prefix:'rate:',limit:1});if(sessions.size||rates.size)await this.storage.setAlarm(now+60*60*1000)}
+async alarm(){const now=Date.now();for(const prefix of ['session:','rate:','verify:','reset:']){const values=await this.storage.list({prefix});for(const[key,value]of values)if(value.expires<=now)await this.storage.delete(key)}const sessions=await this.storage.list({prefix:'session:',limit:1}),rates=await this.storage.list({prefix:'rate:',limit:1});if(sessions.size||rates.size)await this.storage.setAlarm(now+60*60*1000)}
 }
