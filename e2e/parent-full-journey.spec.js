@@ -68,13 +68,13 @@ test('parent creates grade-5 child, completes review, checks dashboard, and conf
  await expect(page.locator('[data-review-summary="'+id+'"]')).toContainText('Latest review: '+score.correct+'/'+score.total);
  await expect(page.getByRole('group',{name:'Daily review progress for Mia'}).locator('[aria-label]')).toHaveCount(7);
  const remove=page.locator('[data-delete-learner="'+id+'"]');
- await remove.click();await expect(remove).toHaveText('Confirm remove');
+ await remove.click();await expect(page.getByRole('dialog',{name:'Remove Mia?'})).toBeVisible();
  expect(db.profiles.learners).toHaveLength(1);
  await page.reload();
- await expect(page.locator('[data-delete-learner="'+id+'"]')).toHaveText('Remove');
+ await expect(page.getByRole('dialog')).toHaveCount(0);
  expect(db.profiles.learners).toHaveLength(1);
  await page.locator('[data-delete-learner="'+id+'"]').click();
- await page.locator('[data-delete-learner="'+id+'"]').click();
+ await page.getByRole('button',{name:'Delete profile and progress'}).click();
  await expect(page.locator('[data-open-learner]')).toHaveCount(0);
  expect(db.profiles.learners).toHaveLength(0);
  expect(db.children[id]).toBeUndefined();
@@ -96,7 +96,7 @@ test('multiple learners retain distinct grade and review history when one is rem
  await expect(page.locator('[data-review-summary="'+mia.id+'"]')).toContainText('Latest review: 2/3');
  await expect(page.locator('[data-review-summary="'+anna.id+'"]')).toContainText('no saved scores yet');
  await page.locator('[data-delete-learner="'+mia.id+'"]').click();
- await page.locator('[data-delete-learner="'+mia.id+'"]').click();
+ await page.getByRole('button',{name:'Delete profile and progress'}).click();
  await expect(page.locator('[data-open-learner]')).toHaveCount(1);
  expect(db.profiles.learners[0]).toMatchObject({id:anna.id,nickname:'Anna',grade:1});
  expect(db.children[anna.id].state.reviewHistory).toHaveLength(0);
