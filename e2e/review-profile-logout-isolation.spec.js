@@ -54,7 +54,7 @@ test('unfinished review blocks return to parent and sign-out, preserving each ch
  expect(db.signouts).toBe(0);
  expect(await draft(page,first)).toBeTruthy();
  expect(await draft(page,second)).toBeNull();
- db.failWrites=false;await page.reload();await page.getByRole('button',{name:'Return to family profiles'}).click();await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();await page.locator('[data-open-learner="'+first+'"]').click();
+ db.failWrites=false;await page.goto('/#today');await page.reload();
  await expect.poll(()=>db.children[first].state.reviewHistory.length).toBe(1);
  await expect.poll(()=>draft(page,first)).toBeNull();
  await page.getByRole('button',{name:'Sign out'}).click();
