@@ -155,3 +155,36 @@ test('duplicate registration and incorrect login do not expose another family',a
  assert.equal((await worker.fetch(req('/api/auth/session',undefined,a.cookie),f.env)).status,200);
  assert.equal((await worker.fetch(req('/api/auth/session',undefined,b.cookie),f.env)).status,200);
 });
+
+test('email verification gates parent login, consumes token once and isolates account',async()=>{
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
+ const signup=await f.auth.fetch(req('/api/auth/register',{username:'verifiedparent',email:'parent@example.test',password}));
+ assert.equal(signup.status,202);assert.equal(mail.length,1);
+ assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'verifiedparent',password}))).status,403);
+ const verifyToken=new URL(mail[0].link).hash.slice('#verify='.length);
+ assert.equal((await f.auth.fetch(req('/api/auth/verify-email',{token:verifyToken}))).status,200);
+ assert.equal((await f.auth.fetch(req('/api/auth/verify-email',{token:verifyToken}))).status,400);
+ const login=await f.auth.fetch(req('/api/auth/login',{username:'verifiedparent',password}));
+ assert.equal(login.status,200);assert.equal((await f.auth.fetch(req('/api/auth/session',undefined,cookieOf(login)))).status,200);
+});
+test('forgot password is non-enumerating, single-use, expiring and revokes all sessions',async()=>{
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
+ assert.equal((await f.auth.fetch(req('/api/auth/register',{username:'parentsecure',email:'secure@example.test',password}))).status,202);
+ const verifyToken=new URL(mail.pop().link).hash.slice('#verify='.length);
+ assert.equal((await f.auth.fetch(req('/api/auth/verify-email',{token:verifyToken}))).status,200);
+ const login=await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password})),cookie=cookieOf(login);
+ const unknown=await f.auth.fetch(req('/api/auth/forgot-password',{email:'missing@example.test'}));
+ const known=await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test'}));
+ assert.equal(unknown.status,200);assert.equal(known.status,200);assert.deepEqual(await unknown.json(),await known.json());
+ assert.equal(mail.length,1);
+ const resetToken=new URL(mail[0].link).hash.slice('#reset='.length);
+ assert.equal((await f.auth.fetch(req('/api/auth/reset-password',{token:resetToken,password:'New long secure password 987!'}))).status,200);
+ assert.equal((await f.auth.fetch(req('/api/auth/reset-password',{token:resetToken,password:'Another long secure password'}))).status,400);
+ assert.equal((await f.auth.fetch(req('/api/auth/session',undefined,cookie))).status,401);
+ assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password}))).status,401);
+ assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password:'New long secure password 987!'}))).status,200);
+ await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test'}));
+ const expired=new URL(mail.at(-1).link).hash.slice('#reset='.length),key='reset:'+await digest(expired),record=await f.ctx.storage.get(key);
+ record.expires=Date.now()-1;await f.ctx.storage.put(key,record);
+ assert.equal((await f.auth.fetch(req('/api/auth/reset-password',{token:expired,password:'Another long secure password'}))).status,400);
+});
