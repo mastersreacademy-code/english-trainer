@@ -13,7 +13,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund && npm install --no-save --no-package-lock @playwright/test@1.56.1
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser tests
