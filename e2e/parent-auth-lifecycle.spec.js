@@ -43,7 +43,8 @@ function service(page){
  return db;
 }
 async function register(page,name){
- await page.goto('/login');
+ if(!page.url().endsWith('/login'))await page.goto('/login');
+ await expect(page.getByRole('button',{name:'New here? Create an account'})).toBeVisible();
  await page.getByRole('button',{name:'New here? Create an account'}).click();
  await page.locator('#username').fill(name);
  await page.locator('#password').fill('Secure family passphrase 123!');
