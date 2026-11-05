@@ -21,7 +21,7 @@ test('parent email verification, reset request and password recovery UI',async({
  await page.locator('#auth-submit').click();
  await expect(page.locator('#auth-message')).toContainText('Check your email');
  expect(inbox).toEqual(['verify']);
- await page.goto('/login#verify='+ 'a'.repeat(64));
+ await page.goto('/login#verify='+ 'a'.repeat(64));await page.reload();
  await expect(page.locator('#auth-submit')).toContainText('Verify email');
  await page.locator('#auth-submit').click();
  await expect(page.locator('#auth-message')).toContainText('Success');
@@ -30,7 +30,7 @@ test('parent email verification, reset request and password recovery UI',async({
  await page.locator('#auth-submit').click();
  await expect(page.locator('#auth-message')).toContainText('instructions');
  expect(inbox).toEqual(['verify','reset']);
- await page.goto('/login#reset='+ 'b'.repeat(64));
+ await page.goto('/login#reset='+ 'b'.repeat(64));await page.reload();
  await page.locator('#password').fill('Brand new family password 456!');
  await page.locator('#password-confirm').fill('Brand new family password 456!');
  await page.locator('#auth-submit').click();
