@@ -4,6 +4,7 @@ import {reviewDraftKey,saveReviewDraft,reviewDraftStatus,clearReviewDraft,review
 import {reviewSyncFailure,latestReviewConflict} from './review-sync-conflict.js';
 import {assertLearnerReviewCanExit} from './learner-exit-guard.js';
 import {exportScopedReviewDraft,importScopedReviewDraft} from './review-backup.js';
+import {discardReviewDraftAfterVerification} from './review-conflict-choice.js';
 import {recoveryMessage} from './review-recovery-message.js';
 import {buildReviewQuestions,scoreReview} from './review-quiz.js';
 import {openAccountWorkspace} from './account-store.js';
@@ -200,20 +201,31 @@ async function openLearnerWorkspace(learner){
   }
   if(recovery.status==='conflict'||recoveryConflict){
    let comparison=reviewDraftComparison(localStorage,draftKey,next.state);
-   if(recoveryConflict){try{const latest=await latestReviewConflict(api,familyAccount.accountId,learner.id);comparison=reviewDraftComparison(localStorage,draftKey,latest.state)}catch{detail.textContent='Online data changed, but the latest copy could not be loaded. Keep your local draft and retry after reconnecting.'}}
-   const score=entry=>entry?entry.correct+'/'+entry.total+' correct on '+entry.date:'No completed review';
-   const online=document.createElement('p');online.textContent='Online: '+score(comparison.online)+' ('+comparison.onlineCount+' reviews)';
-   const local=document.createElement('p');local.textContent='Saved on this device: '+score(comparison.local)+' ('+comparison.localCount+' reviews)';
+   let verifiedOnline=null;
+   try{
+    verifiedOnline=await latestReviewConflict(api,familyAccount.accountId,learner.id);
+    comparison=reviewDraftComparison(localStorage,draftKey,verifiedOnline.state);
+   }catch{detail.textContent='Không thể tải dữ liệu online mới nhất. Giữ bản sao trên máy và thử lại khi có mạng.'}
+   const score=entry=>entry?entry.correct+'/'+entry.total+' đúng · '+entry.date:'Chưa có bài ôn';
+   const online=document.createElement('p');online.textContent='Trên mạng: '+score(comparison.online)+' ('+(comparison.onlineCount??'?')+' bài)';
+   const local=document.createElement('p');local.textContent='Trên thiết bị: '+score(comparison.local)+' ('+(comparison.localCount??'?')+' bài)';
    panel.append(online,local);
-   const keep=document.createElement('button');keep.textContent='Keep local copy';keep.type='button';
-   keep.onclick=()=>{detail.textContent='Local copy retained on this device. Online progress stays unchanged. You can export the draft for safekeeping.'};
-   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Export local draft';
-   exportButton.onclick=()=>{let raw;try{raw=exportScopedReviewDraft(localStorage,familyAccount.accountId,learner.id)}catch(error){detail.textContent=error.message;return}const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='family-learning-review-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-   const useOnline=document.createElement('button');useOnline.type='button';useOnline.textContent='Use online progress (discard local draft)';
-   if(recoveryConflict)useOnline.disabled=true;
-   useOnline.onclick=()=>{if(!confirm('Discard the unsynced local review? This cannot be undone.'))return;chooseReviewDraft(localStorage,draftKey,'online',next.state);panel.remove();notify('Online progress kept; local review draft discarded.')};
-   panel.append(keep,exportButton,useOnline);
-   if(recoveryConflict){const explanation=document.createElement('p');explanation.textContent='A revision conflict occurred during saving. Reopen this learner to load the newest online workspace before deciding to discard the local copy.';panel.append(explanation)}
+   const actions=document.createElement('div');actions.className='actions';
+   const keep=document.createElement('button');keep.textContent='Giữ bản trên thiết bị';keep.type='button';
+   keep.onclick=()=>{detail.textContent='Bản trên thiết bị được giữ nguyên. Không ghi đè dữ liệu trên mạng. Hãy tải bản sao JSON trước khi thử cách khác.'};
+   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Tải bản sao JSON';
+   exportButton.onclick=()=>{let raw;try{raw=exportScopedReviewDraft(localStorage,familyAccount.accountId,learner.id)}catch(error){detail.textContent=error.message;return}const url=URL.createObjectURL(new Blob([raw],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='family-learning-review-'+learner.id+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+   const useOnline=document.createElement('button');useOnline.type='button';useOnline.textContent='Giữ dữ liệu online, bỏ bản trên máy';
+   useOnline.disabled=!verifiedOnline||recoveryConflict;
+   useOnline.onclick=async()=>{
+    if(!verifiedOnline||recoveryConflict)return;
+    if(!confirm('Bỏ kết quả ôn chưa đồng bộ trên thiết bị này? Hãy tải bản sao trước. Thao tác không thể hoàn tác.'))return;
+    useOnline.disabled=true;
+    try{await discardReviewDraftAfterVerification(localStorage,familyAccount.accountId,learner.id,api,verifiedOnline);panel.remove();notify('Đã giữ dữ liệu online. Tải lại trang để xem tiến độ mới nhất.');}
+    catch(error){detail.textContent=error.message+' Bản trên thiết bị vẫn được giữ.';useOnline.disabled=false}
+   };
+   actions.append(keep,exportButton,useOnline);panel.append(actions);
+   if(recoveryConflict){const explanation=document.createElement('p');explanation.textContent='Đang có xung đột phiên bản trong bộ nhớ. Tải bản sao JSON và tải lại trang trước khi quyết định bỏ bản cục bộ.';panel.append(explanation)}
   }
   if(recovery.status==='invalid'){
    const note=document.createElement('p');note.className='small';note.textContent='This draft cannot be compared safely. Keep it until you have a backup.';panel.append(note);
