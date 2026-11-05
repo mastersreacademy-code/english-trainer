@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {freshWorkspace} from '../public/workspace.js';
+import {reviewDraftKey,saveReviewDraft} from '../public/review-draft.js';
+import {reviewConflictChoices,discardReviewDraftAfterVerification} from '../public/review-conflict-choice.js';
+const parent='parent1',child='child0001';
+const storage=()=>{const map=new Map();return{getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,String(v)),removeItem:k=>map.delete(k)}};
+function fixture(){const local=storage(),before=freshWorkspace(),after=structuredClone(before),online=structuredClone(before);after.reviewHistory=[{date:'2026-11-05',grade:5,total:4,correct:3}];online.profile.name='Updated on second device';const key=reviewDraftKey(parent,child);saveReviewDraft(local,key,before,after);return{local,online,key,record:{accountId:parent,learnerId:child,revision:4,state:online}}}
+test('conflict keeps local and online choices available without automatic overwrite',()=>{const {local,online,key}=fixture();assert.deepEqual(reviewConflictChoices(local,parent,child,online),{status:'conflict',canKeepOnline:true,canKeepLocal:true});assert.ok(local.getItem(key))});
+test('online choice only removes local draft after matching revision and learner identity',async()=>{const {local,key,record}=fixture();await discardReviewDraftAfterVerification(local,parent,child,{get:async()=>record},record);assert.equal(local.getItem(key),null)});
+test('changed revision, changed state, wrong learner or network failure preserve local backup',async()=>{for(const mode of ['revision','state','identity','offline']){const {local,key,record}=fixture();const changed=structuredClone(record);if(mode==='revision')changed.revision++;if(mode==='state')changed.state.profile.name='Third device';if(mode==='identity')changed.learnerId='child0002';const api={get:async()=>{if(mode==='offline')throw Error('offline');return changed}};await assert.rejects(discardReviewDraftAfterVerification(local,parent,child,api,record));assert.ok(local.getItem(key),mode)}});
+test('recovery panel offers mobile-friendly actions and does not discard on keep-local',()=>{const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');const css=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');assert.match(app,/Giữ bản trên thiết bị/);assert.match(app,/Giữ dữ liệu online, bỏ bản trên máy/);assert.match(app,/await discardReviewDraftAfterVerification/);assert.match(app,/useOnline.disabled=!verifiedOnline\\|\\|recoveryConflict/);assert.match(css,/#review-recovery-notice \\.actions/);assert.match(css,/min-height:44px/)});
