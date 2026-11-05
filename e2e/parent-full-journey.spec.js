@@ -119,7 +119,8 @@ test('parent edits child name and class without resetting review progress',async
  expect(db.children[id].state.reviewHistory).toHaveLength(1);
  await expect(page.locator('[data-review-summary="'+id+'"]')).toContainText('Latest review: 2/3');
  await page.reload();
- await expect(page.locator('.family-learner')).toContainText(['Mia Updated','Class 6']);
+ await expect(page.locator('[data-edit-learner="'+id+'"]').locator('xpath=../..')).toContainText('Mia Updated');
+ await expect(page.locator('[data-edit-learner="'+id+'"]').locator('xpath=../..')).toContainText('Class 6');
  if(isMobile){const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));expect(size.scroll).toBeLessThanOrEqual(size.width+2)}
 });
 test('unfinished local review backup prevents permanent child deletion',async({page})=>{
