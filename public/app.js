@@ -339,25 +339,38 @@ async function familyDashboard(){
     container.querySelector('[data-edit-form]')?.remove();
     button.closest('.family-learner').after(panel);
     panel.querySelector('[data-cancel-edit]').onclick=()=>panel.remove();
-    panel.onsubmit=async event=>{event.preventDefault();const submit=panel.querySelector('[type="submit"]');submit.disabled=true;try{await persist(editLearner(record.profiles,learner.id,{nickname:panel.elements.nickname.value,grade:Number(panel.elements.grade.value)}))}catch(error){container.querySelector('#family-error').textContent=error.message;submit.disabled=false}};
+    panel.onsubmit=async event=>{event.preventDefault();const submit=panel.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Saving…';try{await persist(editLearner(record.profiles,learner.id,{nickname:panel.elements.nickname.value,grade:Number(panel.elements.grade.value)}))}catch(error){container.querySelector('#family-error').textContent=error.status===409?'Family profiles changed on another device. Reload before editing.':error.message+' Your changes were not confirmed. Reload before retrying.';submit.disabled=false;submit.textContent='Save changes'}};
    });
-   container.querySelectorAll('[data-delete-learner]').forEach(button=>button.onclick=async()=>{
+   container.querySelectorAll('[data-delete-learner]').forEach(button=>button.onclick=()=>{
     const id=button.dataset.deleteLearner,learner=record.profiles.learners.find(item=>item.id===id);
     if(!learner)return;
-    if(localStorage.getItem(reviewDraftKey(familyAccount.accountId,id))!==null){container.querySelector('#family-error').textContent='Resolve or export the unfinished review for '+learner.nickname+' before removing this profile.';return}
-    if(button.dataset.confirmRemove!=='yes'){
-     button.dataset.confirmRemove='yes';button.textContent='Confirm remove';button.setAttribute('aria-label','Confirm removal of this child profile');
-     container.querySelector('#family-error').textContent='Removing '+learner.nickname+' permanently deletes this child’s saved learning progress. Click Confirm remove again to continue.';
-     return;
+    if(localStorage.getItem(reviewDraftKey(familyAccount.accountId,id))!==null){
+     container.querySelector('#family-error').textContent='Resolve or export the unfinished review for '+learner.nickname+' before removing this profile.';return;
     }
-    button.disabled=true;
-    try{
-     const result=await learnerProfilesApi.remove(record.revision,id);
-     if(result.accountId!==familyAccount.accountId||!result.profiles||result.profiles.learners.some(item=>item.id===id))throw Error('Deletion response could not be verified');
-     record={...record,revision:result.revision,profiles:result.profiles};
-     sessionStorage.removeItem('english-active-learner:'+familyAccount.accountId);
-     draw();notify('Learner and saved learning progress removed.');
-    }catch(error){container.querySelector('#family-error').textContent=error.message;button.disabled=false}
+    container.querySelector('[data-delete-dialog]')?.remove();
+    const overlay=document.createElement('div');overlay.className='family-modal-overlay';overlay.setAttribute('data-delete-dialog',id);
+    overlay.innerHTML='<section class="family-modal card" role="dialog" aria-modal="true" aria-labelledby="delete-learner-title" aria-describedby="delete-learner-description"><h2 id="delete-learner-title">Remove '+esc(learner.nickname)+'?</h2><p id="delete-learner-description">This permanently deletes '+esc(learner.nickname)+'’s profile and all saved learning progress. This cannot be undone.</p><p class="small" data-delete-status role="status" aria-live="polite"></p><div class="actions"><button type="button" class="secondary" data-cancel-delete>Cancel</button><button type="button" data-confirm-delete>Delete profile and progress</button></div></section>';
+    document.body.append(overlay);
+    const cancel=overlay.querySelector('[data-cancel-delete]'),confirm=overlay.querySelector('[data-confirm-delete]'),status=overlay.querySelector('[data-delete-status]');
+    const close=()=>{overlay.remove();button.focus()};
+    const escape=event=>{if(event.key==='Escape'&&!confirm.disabled){event.preventDefault();close()}};
+    overlay.addEventListener('keydown',escape);
+    overlay.addEventListener('click',event=>{if(event.target===overlay&&!confirm.disabled)close()});
+    cancel.onclick=close;
+    confirm.focus();
+    confirm.onclick=async()=>{
+     confirm.disabled=true;cancel.disabled=true;confirm.textContent='Deleting…';status.textContent='Removing profile and learning progress…';
+     try{
+      const result=await learnerProfilesApi.remove(record.revision,id);
+      if(result.accountId!==familyAccount.accountId||!result.profiles||result.profiles.learners.some(item=>item.id===id))throw Error('Deletion response could not be verified');
+      record={...record,revision:result.revision,profiles:result.profiles};
+      sessionStorage.removeItem('english-active-learner:'+familyAccount.accountId);
+      overlay.remove();draw();notify('Learner and saved learning progress removed.');
+     }catch(error){
+      status.textContent=error.status===409?'This family changed on another device. Reload to review the latest profiles before deleting.':error.message+' The profile was not removed here. Check your connection and reload before retrying.';
+      confirm.disabled=false;cancel.disabled=false;confirm.textContent='Delete profile and progress';confirm.focus();
+     }
+    };
    });
   }
   draw();

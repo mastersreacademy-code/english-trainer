@@ -64,3 +64,10 @@
 
 /* Decorative sidebar card must never block navigation links on short desktop viewports. */
 .aside-bottom{pointer-events:none}
+
+/* Parent-only destructive action confirmation. */
+.family-modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+.family-modal{width:min(100%,460px);max-height:calc(100dvh - 40px);overflow:auto;background:var(--surface,#fff);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.family-modal .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+.family-modal [data-delete-status]:not(:empty){margin:12px 0}
+@media(max-width:520px){.family-modal-overlay{padding:12px}.family-modal{max-height:calc(100dvh - 24px)}.family-modal .actions button{flex:1 1 100%}}

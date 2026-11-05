@@ -3,7 +3,7 @@ import {freshWorkspace} from '../public/workspace.js';
 const account='parent1';
 function fixture(){
  const parent=freshWorkspace();parent.profile.name='Parent';
- return {profiles:{version:1,activeId:null,learners:[]},profilesRevision:1,parent:{revision:1,state:parent},children:{},writes:0};
+ return {profiles:{version:1,activeId:null,learners:[]},profilesRevision:1,parent:{revision:1,state:parent},children:{},writes:0,failEdit:false,failDelete:false,conflictEdit:false,conflictDelete:false};
 }
 function learnerState(name,grade){
  const state=freshWorkspace();state.profile.name=name;state.profile.goal='grade'+grade;
@@ -16,6 +16,8 @@ async function mock(page,db){
   const send=(value,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)});
   if(path==='/api/auth/session')return send({authenticated:true,accountId:account,username:'Parent',csrf:'test-token'});
   if(path==='/api/learners/delete'){
+   if(db.failDelete)return route.abort('failed');
+   if(db.conflictDelete)return send({error:'Family profiles changed on another device'},409);
    if(!body.confirmed||body.revision!==db.profilesRevision)return send({error:'Invalid deletion'},409);
    if(!db.profiles.learners.some(item=>item.id===body.learnerId))return send({error:'Unknown learner'},404);
    db.profiles.learners=db.profiles.learners.filter(item=>item.id!==body.learnerId);
@@ -25,6 +27,8 @@ async function mock(page,db){
   }
   if(path==='/api/learners'){
    if(post){
+    if(db.failEdit)return route.abort('failed');
+    if(db.conflictEdit)return send({error:'Family profiles changed on another device'},409);
     if(body.revision!==db.profilesRevision)return send({error:'Conflict'},409);
     for(const child of body.profiles.learners)if(!db.children[child.id])db.children[child.id]=learnerState(child.nickname,child.grade);
     db.profiles=structuredClone(body.profiles);db.profilesRevision++;
@@ -68,13 +72,13 @@ test('parent creates grade-5 child, completes review, checks dashboard, and conf
  await expect(page.locator('[data-review-summary="'+id+'"]')).toContainText('Latest review: '+score.correct+'/'+score.total);
  await expect(page.getByRole('group',{name:'Daily review progress for Mia'}).locator('[aria-label]')).toHaveCount(7);
  const remove=page.locator('[data-delete-learner="'+id+'"]');
- await remove.click();await expect(remove).toHaveText('Confirm remove');
+ await remove.click();await expect(page.getByRole('dialog',{name:'Remove Mia?'})).toBeVisible();
  expect(db.profiles.learners).toHaveLength(1);
  await page.reload();
- await expect(page.locator('[data-delete-learner="'+id+'"]')).toHaveText('Remove');
+ await expect(page.getByRole('dialog')).toHaveCount(0);
  expect(db.profiles.learners).toHaveLength(1);
  await page.locator('[data-delete-learner="'+id+'"]').click();
- await page.locator('[data-delete-learner="'+id+'"]').click();
+ await page.getByRole('button',{name:'Delete profile and progress'}).click();
  await expect(page.locator('[data-open-learner]')).toHaveCount(0);
  expect(db.profiles.learners).toHaveLength(0);
  expect(db.children[id]).toBeUndefined();
@@ -96,7 +100,7 @@ test('multiple learners retain distinct grade and review history when one is rem
  await expect(page.locator('[data-review-summary="'+mia.id+'"]')).toContainText('Latest review: 2/3');
  await expect(page.locator('[data-review-summary="'+anna.id+'"]')).toContainText('no saved scores yet');
  await page.locator('[data-delete-learner="'+mia.id+'"]').click();
- await page.locator('[data-delete-learner="'+mia.id+'"]').click();
+ await page.getByRole('button',{name:'Delete profile and progress'}).click();
  await expect(page.locator('[data-open-learner]')).toHaveCount(1);
  expect(db.profiles.learners[0]).toMatchObject({id:anna.id,nickname:'Anna',grade:1});
  expect(db.children[anna.id].state.reviewHistory).toHaveLength(0);
@@ -134,4 +138,49 @@ test('unfinished local review backup prevents permanent child deletion',async({p
  await expect(page.locator('#family-error')).toContainText('Resolve or export the unfinished review');
  expect(db.profiles.learners).toHaveLength(1);
  expect(db.children[id]).toBeDefined();
+});
+
+test('cancel and Escape close delete modal without removing data',async({page,isMobile})=>{
+ const db=fixture();await mock(page,db);await page.goto('/#family');
+ await page.locator('#learner-nickname').fill('Mia');await page.locator('#add-learner button[type="submit"]').click();
+ const id=db.profiles.learners[0].id;
+ await page.locator('[data-delete-learner="'+id+'"]').click();
+ const dialog=page.getByRole('dialog',{name:'Remove Mia?'});
+ await expect(dialog).toContainText('cannot be undone');
+ await dialog.getByRole('button',{name:'Cancel'}).click();
+ await expect(dialog).toHaveCount(0);
+ await page.locator('[data-delete-learner="'+id+'"]').click();
+ await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
+ expect(db.children[id]).toBeDefined();expect(db.profiles.learners).toHaveLength(1);
+ if(isMobile){const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));expect(size.scroll).toBeLessThanOrEqual(size.width+2)}
+});
+test('offline and revision conflict during edit never overwrite server data',async({page})=>{
+ const db=fixture();await mock(page,db);await page.goto('/#family');
+ await page.locator('#learner-nickname').fill('Mia');await page.locator('#add-learner button[type="submit"]').click();
+ const id=db.profiles.learners[0].id;
+ await page.locator('[data-edit-learner="'+id+'"]').click();
+ await page.locator('[data-edit-form] input[name="nickname"]').fill('Wrong name');
+ db.failEdit=true;await page.locator('[data-edit-form] button[type="submit"]').click();
+ await expect(page.locator('#family-error')).toContainText('Reload before retrying');
+ expect(db.profiles.learners[0].nickname).toBe('Mia');
+ db.failEdit=false;db.conflictEdit=true;
+ await page.locator('[data-edit-form] button[type="submit"]').click();
+ await expect(page.locator('#family-error')).toContainText('changed on another device');
+ expect(db.profiles.learners[0].nickname).toBe('Mia');
+ expect(db.children[id]).toBeDefined();
+});
+test('offline and concurrent deletion conflict retain child and permit cancellation',async({page})=>{
+ const db=fixture();await mock(page,db);await page.goto('/#family');
+ await page.locator('#learner-nickname').fill('Mia');await page.locator('#add-learner button[type="submit"]').click();
+ const id=db.profiles.learners[0].id;
+ await page.locator('[data-delete-learner="'+id+'"]').click();
+ const dialog=page.getByRole('dialog',{name:'Remove Mia?'});
+ db.failDelete=true;await dialog.getByRole('button',{name:'Delete profile and progress'}).click();
+ await expect(dialog.locator('[data-delete-status]')).toContainText('Check your connection');
+ expect(db.children[id]).toBeDefined();expect(db.profiles.learners).toHaveLength(1);
+ db.failDelete=false;db.conflictDelete=true;
+ await dialog.getByRole('button',{name:'Delete profile and progress'}).click();
+ await expect(dialog.locator('[data-delete-status]')).toContainText('changed on another device');
+ expect(db.children[id]).toBeDefined();
+ await dialog.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveCount(0);
 });
