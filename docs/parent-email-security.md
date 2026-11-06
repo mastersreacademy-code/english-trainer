@@ -25,3 +25,17 @@ Authentication endpoints share a 15-minute rate limit (300 total attempts and 8 
 **Turnstile server rules:** Every registration and forgot-password request must pass a fresh Turnstile token. Server-side Siteverify checks `success`, exact request hostname, expected action (`register` or `forgot-password`) and challenge timestamp (within 5 minutes). Turnstile tokens are single-use at Cloudflare. Network failures deny the request. The public configuration endpoint exposes only the site key.
 
 **Test limitation:** Browser E2E uses a mocked Turnstile widget and API, while API integration tests mock Siteverify; run a separate real production smoke test with Cloudflare and Resend before announcing public readiness.
+
+## Restricted test mode (single real parent)
+
+For a closed pilot with one real mailbox, set Worker environment variables:
+
+- `EMAIL_TEST_MODE=true` (exact string; other values do not enable the guard).
+- `EMAIL_TEST_RECIPIENT=moonlittran@gmail.com` (exact lowercase value; a missing/different value fails closed for registrations).
+- `EMAIL_API_KEY`: Resend test API key, stored as a secret.
+- `EMAIL_FROM=onboarding@resend.dev` for Resend's testing sender **only when the Resend account owner is the permitted recipient**.
+- `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` must also be set.
+
+With test mode on, only `moonlittran@gmail.com` is passed to the outbound email provider. All other recipients (including real-looking domains) are **simulated locally**: no API call or email is sent. Registration for those accounts creates an **unverified** test account, but the verification link is not delivered, so the test account cannot sign in normally or recover its password. Use API test fixtures to test verification flows, not real production mail. Existing accounts are not modified.
+
+**Safety limitations:** This is an outbound-mail guard, **not an account registration allowlist**. Do not use real personal emails for test accounts. Test mode must remain on until you intentionally launch public email delivery. Keep the application private during the pilot; Resend's test sender is not for general public sending. Do not add secrets to `wrangler.jsonc` or Git.
