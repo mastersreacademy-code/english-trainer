@@ -25,14 +25,14 @@ test.describe('real Worker staging: parent and learner persistence',()=>{
   await page.locator('#learner-grade').selectOption('3');
   await page.locator('#add-learner input[value="math"]').check();
   await page.locator('#add-learner button[type="submit"]').click();
-  await expect(page.locator('.family-learner')).toContainText('Sample A');
+  await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Sample A');
   await page.reload();
-  await expect(page.locator('.family-learner')).toContainText('Sample A');
+  await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Sample A');
   await page.locator('[data-edit-learner]').first().click();
   await page.locator('[data-edit-form] input[value="vietnamese"]').check();
   await page.locator('[data-edit-form] button[type="submit"]').click();
-  await expect(page.locator('.family-learner')).toContainText('Tiếng Việt');
+  await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Tiếng Việt');
   await page.reload();
-  await expect(page.locator('.family-learner')).toContainText('Tiếng Việt');
+  await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Tiếng Việt');
  });
 });
