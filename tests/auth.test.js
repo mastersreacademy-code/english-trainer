@@ -162,7 +162,7 @@ function enableTurnstile(f){
  f.env.TURNSTILE_VERIFY=async data=>({success:data.response==='valid-challenge'||data.response==='valid-forgot',hostname:'english.test',action:data.response==='valid-forgot'?'forgot-password':'register',challenge_ts:new Date().toISOString()});
 }
 test('email verification gates parent login, consumes token once and isolates account',async()=>{
- const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);enableTurnstile(f);f.env.TURNSTILE_VERIFY=async data=>({success:data.response==='valid-challenge',hostname:'english.test',action:data.action||'register',challenge_ts:new Date().toISOString()});
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);enableTurnstile(f);
  const signup=await f.auth.fetch(req('/api/auth/register',{username:'verifiedparent',email:'parent@example.test',password,turnstileToken:'valid-challenge'}));
  assert.equal(signup.status,202);assert.equal(mail.length,1);
  assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'verifiedparent',password}))).status,403);
@@ -173,7 +173,7 @@ test('email verification gates parent login, consumes token once and isolates ac
  assert.equal(login.status,200);assert.equal((await f.auth.fetch(req('/api/auth/session',undefined,cookieOf(login)))).status,200);
 });
 test('forgot password is non-enumerating, single-use, expiring and revokes all sessions',async()=>{
- const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);enableTurnstile(f);
  assert.equal((await f.auth.fetch(req('/api/auth/register',{username:'parentsecure',email:'secure@example.test',password,turnstileToken:'valid-challenge'}))).status,202);
  const verifyToken=new URL(mail.pop().link).hash.slice('#verify='.length);
  assert.equal((await f.auth.fetch(req('/api/auth/verify-email',{token:verifyToken}))).status,200);
@@ -190,7 +190,7 @@ test('forgot password is non-enumerating, single-use, expiring and revokes all s
  await f.ctx.storage.delete('rate:'+await digest('test-client'));
  assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password:'New long secure password 987!'}))).status,200);
  await f.ctx.storage.delete('rate:'+await digest('test-client'));
- await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test'}));
+ await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test',turnstileToken:'valid-forgot'}));
  const expired=new URL(mail.at(-1).link).hash.slice('#reset='.length),key='reset:'+await digest(expired),record=await f.ctx.storage.get(key);
  record.expires=Date.now()-1;await f.ctx.storage.put(key,record);
  assert.equal((await f.auth.fetch(req('/api/auth/reset-password',{token:expired,password:'Another long secure password'}))).status,400);
