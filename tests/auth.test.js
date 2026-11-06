@@ -244,3 +244,39 @@ test('rate limiting runs before outbound Turnstile verification',async()=>{
  const blocked=await f.auth.fetch(req('/api/auth/forgot-password',{email:'unknown@example.test',turnstileToken:'fake'}));
  assert.equal(blocked.status,429);assert.equal(blocked.headers.get('Retry-After'),'900');assert.equal(calls,8);
 });
+
+test('EMAIL_TEST_MODE sends only to the exact real parent and simulates all other deliveries',async()=>{
+ const f=await fixture(),sent=[];
+ f.env.EMAIL_TEST_MODE='true';f.env.EMAIL_TEST_RECIPIENT='moonlittran@gmail.com';
+ f.env.EMAIL_API_KEY='resend-test';f.env.EMAIL_FROM='onboarding@resend.dev';
+ f.env.EMAIL_SEND=async item=>{sent.push(item)};
+ enableTurnstile(f);
+ const signup=async(username,email)=>f.auth.fetch(req('/api/auth/register',{username,email,password,turnstileToken:'valid-challenge'}));
+ assert.equal((await signup('moonlitparent','moonlittran@gmail.com')).status,202);
+ assert.equal(sent.length,1);assert.equal(sent[0].email,'moonlittran@gmail.com');
+ assert.equal((await signup('testfamily','fake@example.test')).status,202);
+ assert.equal((await signup('otherfamily','someone@gmail.com')).status,202);
+ assert.equal(sent.length,1);
+ assert.equal((await f.ctx.storage.get('user:testfamily')).verified,false);
+ assert.equal((await f.ctx.storage.get('user:otherfamily')).verified,false);
+ const realToken=new URL(sent[0].link).hash.slice('#verify='.length);
+ assert.equal((await f.auth.fetch(req('/api/auth/verify-email',{token:realToken}))).status,200);
+ assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:'moonlittran@gmail.com',turnstileToken:'valid-forgot'}))).status,200);
+ assert.equal(sent.length,2);assert.equal(sent[1].email,'moonlittran@gmail.com');
+ const fakeRecord=await f.ctx.storage.get('user:testfamily');
+ await f.ctx.storage.put('user:testfamily',{...fakeRecord,verified:true});
+ assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:'fake@example.test',turnstileToken:'valid-forgot'}))).status,200);
+ assert.equal(sent.length,2);
+});
+test('EMAIL_TEST_MODE fails closed on missing or wrong allowlist, including mixed case',async()=>{
+ const f=await fixture(),sent=[];f.env.EMAIL_TEST_MODE='true';f.env.EMAIL_API_KEY='resend-test';f.env.EMAIL_FROM='onboarding@resend.dev';
+ f.env.EMAIL_SEND=async item=>sent.push(item);enableTurnstile(f);
+ const signup=(username,email)=>f.auth.fetch(req('/api/auth/register',{username,email,password,turnstileToken:'valid-challenge'}));
+ assert.equal((await signup('unsafeparent','moonlittran@gmail.com')).status,503);
+ f.env.EMAIL_TEST_RECIPIENT='someone@gmail.com';
+ assert.equal((await signup('unsafeparent','moonlittran@gmail.com')).status,503);
+ assert.equal(await f.ctx.storage.get('user:unsafeparent'),undefined);
+ f.env.EMAIL_TEST_RECIPIENT='moonlittran@gmail.com';
+ assert.equal((await signup('safeparent','MOONLITTRAN@GMAIL.COM')).status,202);
+ assert.equal(sent.length,1);assert.equal(sent[0].email,'moonlittran@gmail.com');
+});
