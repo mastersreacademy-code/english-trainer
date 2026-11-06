@@ -156,9 +156,14 @@ test('duplicate registration and incorrect login do not expose another family',a
  assert.equal((await worker.fetch(req('/api/auth/session',undefined,b.cookie),f.env)).status,200);
 });
 
+
+function enableTurnstile(f){
+ f.env.TURNSTILE_SITE_KEY='test-site-key';f.env.TURNSTILE_SECRET_KEY='test-secret';
+ f.env.TURNSTILE_VERIFY=async data=>({success:data.response==='valid-challenge'||data.response==='valid-forgot',hostname:'english.test',action:data.response==='valid-forgot'?'forgot-password':'register',challenge_ts:new Date().toISOString()});
+}
 test('email verification gates parent login, consumes token once and isolates account',async()=>{
- const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
- const signup=await f.auth.fetch(req('/api/auth/register',{username:'verifiedparent',email:'parent@example.test',password}));
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);enableTurnstile(f);f.env.TURNSTILE_VERIFY=async data=>({success:data.response==='valid-challenge',hostname:'english.test',action:data.action||'register',challenge_ts:new Date().toISOString()});
+ const signup=await f.auth.fetch(req('/api/auth/register',{username:'verifiedparent',email:'parent@example.test',password,turnstileToken:'valid-challenge'}));
  assert.equal(signup.status,202);assert.equal(mail.length,1);
  assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'verifiedparent',password}))).status,403);
  const verifyToken=new URL(mail[0].link).hash.slice('#verify='.length);
@@ -169,12 +174,12 @@ test('email verification gates parent login, consumes token once and isolates ac
 });
 test('forgot password is non-enumerating, single-use, expiring and revokes all sessions',async()=>{
  const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
- assert.equal((await f.auth.fetch(req('/api/auth/register',{username:'parentsecure',email:'secure@example.test',password}))).status,202);
+ assert.equal((await f.auth.fetch(req('/api/auth/register',{username:'parentsecure',email:'secure@example.test',password,turnstileToken:'valid-challenge'}))).status,202);
  const verifyToken=new URL(mail.pop().link).hash.slice('#verify='.length);
  assert.equal((await f.auth.fetch(req('/api/auth/verify-email',{token:verifyToken}))).status,200);
  const login=await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password})),cookie=cookieOf(login);
- const unknown=await f.auth.fetch(req('/api/auth/forgot-password',{email:'missing@example.test'}));
- const known=await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test'}));
+ const unknown=await f.auth.fetch(req('/api/auth/forgot-password',{email:'missing@example.test',turnstileToken:'valid-forgot'}));
+ const known=await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test',turnstileToken:'valid-forgot'}));
  assert.equal(unknown.status,200);assert.equal(known.status,200);assert.deepEqual(await unknown.json(),await known.json());
  assert.equal(mail.length,1);
  const resetToken=new URL(mail[0].link).hash.slice('#reset='.length);
