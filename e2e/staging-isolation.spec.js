@@ -58,7 +58,8 @@ test.describe('real staging Worker: family and score persistence',()=>{
    await page.reload();
    await expect(page.locator('body')).toContainText(summary);
    // The learner workspace must be explicitly closed before selecting another child.
-   const returnButton=page.locator('[data-exit-learner]');
+   await page.goto(origin+'/#family');
+   const returnButton=page.locator('#return-to-parent');
    await expect(returnButton).toBeVisible();
    await returnButton.click();
    await expect(page.locator('#add-learner')).toBeVisible();
