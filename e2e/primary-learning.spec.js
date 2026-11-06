@@ -1,18 +1,17 @@
-// Run separately after installing @playwright/test and starting the Worker.
-// BASE_URL must point to an isolated staging environment with a test parent account.
-// Authentication is intentionally not bypassed; provide an authenticated storageState
-// for a dedicated test parent in PLAYWRIGHT_STORAGE_STATE.
-import {test,expect,devices} from '@playwright/test';
-const authenticated=process.env.PLAYWRIGHT_STORAGE_STATE;
-for(const [name,use] of [['desktop',{viewport:{width:1440,height:900}}],['mobile',{...devices['iPhone 13']}]]){
+import {test,expect} from '@playwright/test';
+// Chromium desktop and mobile viewport smoke checks. An authenticated staging
+// session is required for learner-specific assertions.
+const auth=process.env.PLAYWRIGHT_STORAGE_STATE;
+for(const [name,viewport] of [['desktop',{width:1440,height:900}],['mobile',{width:390,height:844}]]){
  test.describe(name,()=>{
-  test.use({...use,...(authenticated?{storageState:authenticated}:{})});
-  test('primary route requires a selected learner and renders a responsive entry point',async({page})=>{
-   test.skip(!authenticated,'Authenticated test parent storage state required');
+  test.use({viewport});
+  test('primary learning route loads without horizontal overflow',async({page})=>{
+   test.skip(!auth,'Requires a dedicated authenticated staging test parent');
    await page.goto('/#primary');
    await expect(page.locator('#app')).toBeVisible();
    await expect(page.locator('h1')).toBeVisible();
-   await expect(page.locator('body')).toHaveJSProperty('scrollWidth',await page.evaluate(()=>document.body.scrollWidth));
+   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+2);
+   expect(overflow).toBe(false);
   });
  });
 }
