@@ -90,6 +90,7 @@ if(await this.storage.get('user:'+username))return json({error:'That username is
 const salt=randomToken(),hash=await passwordHash(body.password,salt);await this.storage.put('account',{username,salt,hash,iterations:ITERATIONS,created:Date.now()});return this.newSession({username,id:'legacy'});
 }
 if(path==='/api/auth/register'){
+if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
 if(body.website)return json({error:'Registration unavailable.'},400);
 if(this.env.EMAIL_API_KEY||this.env.TURNSTILE_SECRET_KEY||this.env.TURNSTILE_SITE_KEY){
  const challenge=await verifyTurnstile(this.env,request,body);
@@ -97,7 +98,6 @@ if(this.env.EMAIL_API_KEY||this.env.TURNSTILE_SECRET_KEY||this.env.TURNSTILE_SIT
 }
  if(this.env.EMAIL_API_KEY){
   if(!this.env.EMAIL_FROM)return json({error:'Email delivery is not configured.'},503);
-  if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
   const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
   const email=typeof body.email==='string'?body.email.trim().toLowerCase():'';
   if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password)||email.length>254||!EMAIL_PATTERN.test(email))return json({error:'Enter a valid email, username and password of at least 12 characters.'},400);
@@ -111,7 +111,6 @@ if(this.env.EMAIL_API_KEY||this.env.TURNSTILE_SECRET_KEY||this.env.TURNSTILE_SIT
   catch{await this.storage.delete('user:'+username);await this.storage.delete('email:'+await digest(email));await this.storage.delete(tokenKey);return json({error:'Unable to send verification email. Please try again.'},503)}
   await this.scheduleCleanup();return json({ok:true,verificationRequired:true},202);
  }
-if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
 const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
 if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password))return json({error:'Use a 3–40 character username and a password of 12–128 characters.'},400);
 if(account?.username===username||await this.storage.get('user:'+username))return json({error:'That username is unavailable. Choose another one.'},409);
@@ -137,8 +136,8 @@ if(path==='/api/auth/verify-email'||path==='/api/auth/reset-password'){
  await this.storage.delete(key);await this.revokeSessions(user.id);return json({ok:true});
 }
 if(path==='/api/auth/forgot-password'){
- if(this.env.EMAIL_API_KEY||this.env.TURNSTILE_SECRET_KEY||this.env.TURNSTILE_SITE_KEY){const challenge=await verifyTurnstile(this.env,request,body);if(challenge)return json({error:challenge.error},challenge.status)}
  if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
+ if(this.env.EMAIL_API_KEY||this.env.TURNSTILE_SECRET_KEY||this.env.TURNSTILE_SITE_KEY){const challenge=await verifyTurnstile(this.env,request,body);if(challenge)return json({error:challenge.error},challenge.status)}
  const email=typeof body.email==='string'?body.email.trim().toLowerCase():'';
  if(email.length>254||!EMAIL_PATTERN.test(email))return json(PUBLIC_AUTH_RESPONSE);
  const username=await this.storage.get('email:'+await digest(email)),user=username?await this.storage.get('user:'+username):null;
