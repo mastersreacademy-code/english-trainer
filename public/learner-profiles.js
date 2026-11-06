@@ -29,5 +29,5 @@ export function deleteLearner(value,id){
 export function editLearner(value,id,changes){
  const current=normalizeLearners(value);
  if(!current.learners.some(item=>item.id===id))throw Error('Learner not found');
- return normalizeLearners({...current,learners:current.learners.map(item=>item.id===id?{...item,nickname:changes.nickname,grade:changes.grade}:item)});
+ return normalizeLearners({...current,learners:current.learners.map(item=>item.id===id?{...item,nickname:changes.nickname,grade:changes.grade,subjects:changes.subjects??item.subjects}:item)});
 }
