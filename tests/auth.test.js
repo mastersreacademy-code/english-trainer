@@ -202,3 +202,45 @@ test('automated registration honeypot rejects submissions without creating accou
  assert.equal(response.status,400);
  assert.equal(await f.ctx.storage.get('user:botparent'),undefined);
 });
+
+test('Turnstile configuration exposes site key only',async()=>{
+ const f=await fixture();enableTurnstile(f);
+ const response=await worker.fetch(req('/api/auth/turnstile-config'),f.env);
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{siteKey:'test-site-key',enabled:true});
+ assert.equal(response.headers.get('Cache-Control'),'private, no-store, max-age=0');
+});
+test('registration and recovery fail closed when Turnstile is missing or misconfigured',async()=>{
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
+ const signup={username:'guardedparent',email:'guarded@example.test',password};
+ assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,503);
+ assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:signup.email}))).status,503);
+ enableTurnstile(f);
+ assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,403);
+ assert.equal((await f.auth.fetch(req('/api/auth/register',{...signup,turnstileToken:'invalid'}))).status,403);
+ assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:signup.email}))).status,403);
+ assert.equal(await f.ctx.storage.get('user:guardedparent'),undefined);assert.equal(mail.length,0);
+});
+test('Turnstile validates hostname, action, freshness and handles network errors',async()=>{
+ const f=await fixture();enableTurnstile(f);f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';
+ let attempts=0;
+ const signup={username:'protectedparent',email:'protected@example.test',password,turnstileToken:'test-token'};
+ for(const result of [
+  {success:false},
+  {success:true,hostname:'attacker.test',action:'register',challenge_ts:new Date().toISOString()},
+  {success:true,hostname:'english.test',action:'forgot-password',challenge_ts:new Date().toISOString()},
+  {success:true,hostname:'english.test',action:'register',challenge_ts:new Date(Date.now()-6*60*1000).toISOString()}
+ ]){
+  f.env.TURNSTILE_VERIFY=async()=>{attempts++;return result};
+  assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,403);
+ }
+ f.env.TURNSTILE_VERIFY=async()=>{throw Error('network unavailable')};
+ assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,503);
+ assert.equal(attempts,4);assert.equal(await f.ctx.storage.get('user:protectedparent'),undefined);
+});
+test('rate limiting runs before outbound Turnstile verification',async()=>{
+ const f=await fixture();enableTurnstile(f);f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';
+ let calls=0;f.env.TURNSTILE_VERIFY=async()=>{calls++;return {success:false}};
+ for(let i=0;i<8;i++)assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:'unknown@example.test',turnstileToken:'fake'}))).status,403);
+ const blocked=await f.auth.fetch(req('/api/auth/forgot-password',{email:'unknown@example.test',turnstileToken:'fake'}));
+ assert.equal(blocked.status,429);assert.equal(blocked.headers.get('Retry-After'),'900');assert.equal(calls,8);
+});
