@@ -37,15 +37,35 @@ const examples = {
     5:[['Từ “đầu” trong “đầu nguồn” được dùng theo nghĩa nào?','nghĩa chuyển','nghĩa gốc','từ đồng âm'],['Cặp từ nào là từ trái nghĩa?','cao – thấp','cao – lớn','nhanh – mau']]
   }
 };
+
+// Additional original arithmetic drills, intentionally separate from the
+// curriculum topic map until individual expected outcomes are reviewed.
+function extraMath(grade){
+ const limit=[0,10,100,1000,10000,100000][grade];
+ return Array.from({length:8},(_,i)=>{
+  const a=(grade===1?i+1:(i+2)*grade*3),b=(grade===1?i%3+1:(i+1)*grade);
+  const total=a+b;
+  return [`${a} + ${b} = ?`,total,total+grade,total+grade+1];
+ }).filter(([question])=>Number(question.split(' ')[0])<limit);
+}
+const extraVietnamese={
+ 1:[['Chữ nào là nguyên âm?','a','b','c'],['Từ nào chỉ đồ dùng học tập?','bút','mèo','mưa'],['Từ nào có vần “ong”?','bông','bàn','bé']],
+ 2:[['Từ nào chỉ đặc điểm?','đẹp','đi','học'],['Từ nào chỉ sự vật?','cây','chạy','nhanh'],['Câu “Em yêu mẹ” cần dấu gì ở cuối?','.','?',',']],
+ 3:[['Từ nào gần nghĩa với “dũng cảm”?','gan dạ','nhút nhát','sợ hãi'],['Câu nào là câu hỏi?','Bạn đi đâu?','Trời đẹp.','Em hãy ngồi xuống!'],['Từ nào chỉ trạng thái?','vui','bàn','bút']],
+ 4:[['Cặp từ nào trái nghĩa?','nóng – lạnh','đẹp – xinh','nhanh – mau'],['Câu nào có phép so sánh?','Mây trắng như bông.','Mây bay.','Trời mưa.'],['Từ nào là động từ?','đọc','đỏ','tròn']],
+ 5:[['Cặp từ nào đồng nghĩa?','chăm chỉ – siêng năng','cao – thấp','sáng – tối'],['Câu nào dùng quan hệ nguyên nhân?','Vì trời mưa nên đường ướt.','Trời mưa.','Đường rất rộng.'],['Từ nào là đại từ xưng hô?','chúng tôi','quyển sách','xanh']]
+};
+
 export function primaryTopics(subject,grade){
   if(!primarySubjects.some(s=>s.id===subject)||!Number.isInteger(grade)||grade<1||grade>5)throw new RangeError('Invalid primary subject or grade');
   return curriculum[subject][grade].map((name,index)=>({id:`${subject}-g${grade}-t${index+1}`,name,subject,grade}));
 }
 export function primaryPractice(subject,grade){
   const topics=primaryTopics(subject,grade);
-  return examples[subject][grade].map(([question,answer,...distractors],index)=>({
+  const rows=[...examples[subject][grade],...(subject==='math'?extraMath(grade):extraVietnamese[grade])];
+  return rows.map(([question,answer,...distractors],index)=>({
     id:`${subject}-g${grade}-q${index+1}`,subject,grade,topicId:topics[index%topics.length].id,
-    question,options:[answer,...distractors],correctIndex:0,
+    question,options:[answer,...distractors].map((_,i,all)=>all[(i+(index%3))%all.length]),correctIndex:(3-(index%3))%3,
     explanation:subject==='math'?'Kiểm tra lại từng bước tính và đối chiếu kết quả.':'Đọc kỹ câu hỏi và xác định nghĩa của từ hoặc câu.'
   }));
 }
