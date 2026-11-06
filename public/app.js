@@ -16,6 +16,7 @@ import {buildInfo} from './version.js';
 import {familyKey,isChild} from './family.js';
 import {addLearner,chooseLearner,editLearner} from './learner-profiles.js';
 import {subjects} from './subjects.js';
+import {createPrimarySession,gradePrimarySession,summarizePrimaryResults} from './primary-practice.js';
 import {initAppearance} from './appearance.js';
 import {goalDetails,icon,scene} from './visuals.js';
 import {topics,vocabularyFor,dateKey,lesson,listening,planCount,nextLesson,lessonPrompts} from './learning.js';
@@ -299,8 +300,8 @@ async function familyDashboard(){
   if(record.accountId!==familyAccount.accountId)throw Error('Account mismatch');
   function draw(){
    const profiles=record.profiles;
-   container.innerHTML='<h2>Your learners</h2><h3>School subjects · Môn học</h3><div class="family-list">'+subjects.map(subject=>'<div class="family-learner"><div><strong>'+esc(subject.nameVi)+' / '+esc(subject.name)+'</strong><p class="small">Lớp 1–12 · Classes 1–12</p></div><span class="small">'+(subject.available?'Available · Đang học':'Coming soon · Sắp ra mắt')+'</span></div>').join('')+'</div><p class="small">Toán và Tiếng Việt đang chuẩn bị nội dung; chưa thể bắt đầu học hai môn này.</p>'+
-    (profiles.learners.length?'<div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p><p class="small" data-review-summary="'+esc(item.id)+'">Loading review progress…</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-edit-learner="'+esc(item.id)+'">Edit</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
+   container.innerHTML='<h2>Your learners</h2><h3>School subjects · Môn học</h3><div class="family-list">'+subjects.map(subject=>'<div class="family-learner"><div><strong>'+esc(subject.nameVi)+' / '+esc(subject.name)+'</strong><p class="small">Lớp 1–12 · Classes 1–12</p></div><span class="small">'+(subject.available?'Available · Đang học':'Coming soon · Sắp ra mắt')+'</span></div>').join('')+'</div><p class="small">Toán và Tiếng Việt có bài ôn tập mẫu cho lớp 1–5; nội dung đầy đủ đang phát triển.</p>'+
+    (profiles.learners.length?'<p><a class="button" href="#primary">Ôn tập Toán & Tiếng Việt cho học sinh đang chọn</a></p><div class="family-list">'+profiles.learners.map(item=>'<div class="family-learner"><div><strong>'+esc(item.nickname)+'</strong><p class="small">Class '+item.grade+' · English'+(profiles.activeId===item.id?' · Selected':'')+'</p><p class="small" data-review-summary="'+esc(item.id)+'">Loading review progress…</p></div><div class="actions"><button type="button" class="secondary" data-select-learner="'+esc(item.id)+'" '+(profiles.activeId===item.id?'disabled':'')+'>Select</button><button type="button" data-open-learner="'+esc(item.id)+'">Start learning</button><button type="button" class="secondary" data-edit-learner="'+esc(item.id)+'">Edit</button><button type="button" class="secondary" data-delete-learner="'+esc(item.id)+'">Remove</button></div></div>').join('')+'</div>':'<p>No child profiles yet.</p>')+
     '<h3>Add a child</h3><form id="add-learner"><label for="learner-nickname">Nickname</label><input id="learner-nickname" name="nickname" maxlength="40" required autocomplete="off"><label for="learner-grade">Class level</label><select id="learner-grade" name="grade">'+Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'">Class '+(i+1)+'</option>').join('')+'</select><button type="submit">Add learner</button></form><p id="family-error" role="status" aria-live="polite"></p>';
    // Parent-only read of each child's existing authenticated workspace.
    // Never copy scores into the parent's workspace or mix learner IDs.
@@ -376,7 +377,41 @@ async function familyDashboard(){
   draw();
  }catch(error){container.innerHTML='<p>Could not load family profiles. Your existing learning data is safe.</p><p class="small">'+esc(error.message)+'</p><button id="family-retry">Try again</button>';on('#family-retry',familyDashboard)}
 }
-function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';if(currentLearner&&page==='family'){app.innerHTML=header()+'<h1>Learning as '+esc(currentLearner.nickname)+'</h1><p>Save this learner’s progress before returning to the parent account.</p><button id="return-to-parent">Return to family profiles</button><p id="return-error" role="status"></p>';on('#return-to-parent',async()=>{const button=$('#return-to-parent');button.disabled=true;try{await returnToParentWorkspace()}catch(error){$('#return-error').textContent=error.message;showLearnerExitRecovery(error);button.disabled=false}});return}document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(page==='family'){familyDashboard();window.scrollTo(0,0);return}if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,'daily-review':todaysReview,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
+function primaryLearning(){
+ if(!currentLearner){app.innerHTML=header()+'<section class="card"><h1>Toán & Tiếng Việt</h1><p>Chọn hồ sơ học sinh trong Family profiles để bắt đầu.</p><a class="button" href="#family">Chọn học sinh</a></section>';return}
+ if(currentLearner.grade>5){app.innerHTML=header()+'<section class="card"><h1>Chương trình tiểu học</h1><p>Toán và Tiếng Việt hiện hỗ trợ lớp 1–5.</p><a href="#family">Quay lại</a></section>';return}
+ const grade=currentLearner.grade,learnerId=currentLearner.id;
+ const history=state.primaryHistory||[];
+ const summary=summarizePrimaryResults(history.map(r=>({...r,learnerId})),learnerId);
+ app.innerHTML=header()+'<section class="card"><span class="eyebrow">FAMILY LEARNING · PRIMARY</span><h1>Ôn tập cùng '+esc(currentLearner.nickname)+'</h1><p>Lớp '+grade+' · Chọn môn học và trả lời câu hỏi. Đây là bộ bài mẫu, chưa phải chương trình đầy đủ cả năm.</p><div class="actions"><button class="secondary" data-primary-subject="math">Toán</button><button class="secondary" data-primary-subject="vietnamese">Tiếng Việt</button><a class="button secondary" href="#today">Tiếng Anh</a></div><p class="small">Toán: '+summary.math.sessions+' lượt · Tiếng Việt: '+summary.vietnamese.sessions+' lượt</p><div id="primary-questions" aria-live="polite"></div></section>';
+ const area=$('#primary-questions');
+ app.querySelectorAll('[data-primary-subject]').forEach(button=>button.onclick=()=>{
+  const subject=button.dataset.primarySubject;
+  const session=createPrimarySession({subject,grade,learnerId,day:dateKey()});
+  area.innerHTML='<h2>'+(subject==='math'?'Toán':'Tiếng Việt')+' · Lớp '+grade+'</h2><form id="primary-quiz">'+session.questions.map((q,i)=>'<fieldset class="card" style="margin:12px 0"><legend><strong>Câu '+(i+1)+': '+esc(q.question)+'</strong></legend>'+q.options.map((option,j)=>'<label style="display:block;padding:8px"><input type="radio" name="q'+i+'" value="'+j+'" required> '+esc(option)+'</label>').join('')+'</fieldset>').join('')+'<button type="submit">Chấm bài và lưu kết quả</button></form><div id="primary-result" role="status"></div>';
+  const form=area.querySelector('#primary-quiz');
+  form.onsubmit=async event=>{
+   event.preventDefault();
+   const answers=session.questions.map((q,i)=>Number(new FormData(form).get('q'+i)));
+   const result=gradePrimarySession(session,answers);
+   const saveButton=form.querySelector('[type="submit"]');saveButton.disabled=true;saveButton.textContent='Đang lưu…';
+   const previous=state.primaryHistory||[];
+   state.primaryHistory=[...previous.filter(r=>r.id!==session.id),{id:session.id,day:session.day,subject,grade,correct:result.correct,total:result.total}].slice(-120);
+   try{
+    if(!save())throw Error('Không thể lưu bài làm');
+    await accountStore.flush();
+    form.querySelectorAll('input').forEach(input=>input.disabled=true);
+    area.querySelector('#primary-result').innerHTML='<h3>Đã lưu: '+result.correct+'/'+result.total+' ('+result.percent+'%)</h3>'+result.items.map((item,i)=>'<p>Câu '+(i+1)+': '+(item.correct?'Đúng':'Chưa đúng')+' · Đáp án: '+esc(item.correctAnswer)+' · '+esc(item.explanation)+'</p>').join('');
+    saveButton.textContent='Đã lưu bài';
+   }catch(error){
+    state.primaryHistory=previous;
+    saveButton.disabled=false;saveButton.textContent='Thử lưu lại';
+    area.querySelector('#primary-result').textContent='Chưa xác nhận lưu thành công. Kiểm tra kết nối và thử lại. '+error.message;
+   }
+  };
+ });
+}
+function render(){document.documentElement.dataset.learner=state.profile?.goal||'conversation';stopMedia();if(recordURL){URL.revokeObjectURL(recordURL);recordURL=null}if(storageError){app.innerHTML=header()+`<h1>Your account data is unavailable.</h1><p>Could not load your account data. Nothing has been overwritten.</p><button id="reload-account">Reload account data</button>`;on('#reload-account',()=>location.reload());return}const page=location.hash.slice(1)||'today';if(currentLearner&&page==='family'){app.innerHTML=header()+'<h1>Learning as '+esc(currentLearner.nickname)+'</h1><p>Save this learner’s progress before returning to the parent account.</p><button id="return-to-parent">Return to family profiles</button><p id="return-error" role="status"></p>';on('#return-to-parent',async()=>{const button=$('#return-to-parent');button.disabled=true;try{await returnToParentWorkspace()}catch(error){$('#return-error').textContent=error.message;showLearnerExitRecovery(error);button.disabled=false}});return}document.querySelectorAll('nav a').forEach(a=>{const selected=a.hash==='#'+page;a.classList.toggle('active',selected);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(page==='family'){familyDashboard();window.scrollTo(0,0);return}if(page==='primary'){primaryLearning();window.scrollTo(0,0);return}if(!state.profile){setup();return}if(page==='check'){quizIndex=0;quizAnswers=[];quizChosen=null}({today,plan,library,lesson:session,words,progress,settings,family:familyDashboard,'daily-review':todaysReview,check:levelCheck,complete}[page]||today)();window.scrollTo(0,0)}
 
 document.addEventListener('click',async e=>{if(e.target.closest('#review-backup-open')){showLearnerExitRecovery(new Error('Chọn tệp sao lưu của đúng hồ sơ trẻ. Tệp chỉ được lưu tạm; tải lại trang để kiểm tra trước khi khôi phục.'));return}if(e.target.closest('[data-sync-status]')){if(syncState==='conflict'){notify('Your progress changed on another device. Export your work before reloading.');return}try{await accountStore?.retry()}catch(error){notify(error.message)}return}if(e.target.closest('#signout')){const button=e.target.closest('#signout');button.disabled=true;stopMedia();try{if(currentLearner)await ensureLearnerCanExit();else await accountStore?.flush();sessionStorage.removeItem(accountSessionKey);await signOut()}catch(error){showLearnerExitRecovery(error);button.disabled=false}return}});
 document.querySelector('.skip-link')?.addEventListener('click',e=>{e.preventDefault();app.focus()});
