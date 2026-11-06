@@ -16,11 +16,11 @@ test('delete selected learner chooses another',()=>{
  const two=addLearner(one,learner('learner_002'),'learner_002');
  assert.equal(deleteLearner(two,'learner_001').activeId,'learner_002');
 });
-test('reject duplicates, missing learners, and unavailable subjects',()=>{
+test('reject duplicates, missing learners, and grade-ineligible subjects',()=>{
  const one=addLearner(emptyLearners(),learner('learner_001'),'learner_001');
  assert.throws(()=>addLearner(one,learner('learner_001'),'learner_001'));
  assert.throws(()=>chooseLearner(one,'learner_999'));
- assert.throws(()=>addLearner(one,{...learner('learner_002'),subjects:['math']},'learner_002'));
+ assert.throws(()=>addLearner(one,{...learner('learner_002'),subjects:['math'],grade:6},'learner_002'));
 });
 test('enforce learner limit',()=>{
  let family=emptyLearners();
