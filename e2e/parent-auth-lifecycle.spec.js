@@ -55,7 +55,8 @@ async function register(page,name){
  await expect(page.getByRole('button',{name:'Sign out'})).toBeVisible();
 }
 async function signIn(page,name){
- await page.goto('/login');
+ // Avoid racing the preceding logout redirect on slower mobile CI.
+ await expect(page).toHaveURL(/\/login$/);
  await page.locator('#username').fill(name);
  await page.locator('#password').fill('Secure family passphrase 123!');
  await page.locator('#auth-submit').click();
