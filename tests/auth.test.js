@@ -156,9 +156,14 @@ test('duplicate registration and incorrect login do not expose another family',a
  assert.equal((await worker.fetch(req('/api/auth/session',undefined,b.cookie),f.env)).status,200);
 });
 
+
+function enableTurnstile(f){
+ f.env.TURNSTILE_SITE_KEY='test-site-key';f.env.TURNSTILE_SECRET_KEY='test-secret';
+ f.env.TURNSTILE_VERIFY=async data=>({success:data.response==='valid-challenge'||data.response==='valid-forgot',hostname:'english.test',action:data.response==='valid-forgot'?'forgot-password':'register',challenge_ts:new Date().toISOString()});
+}
 test('email verification gates parent login, consumes token once and isolates account',async()=>{
- const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
- const signup=await f.auth.fetch(req('/api/auth/register',{username:'verifiedparent',email:'parent@example.test',password}));
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);enableTurnstile(f);
+ const signup=await f.auth.fetch(req('/api/auth/register',{username:'verifiedparent',email:'parent@example.test',password,turnstileToken:'valid-challenge'}));
  assert.equal(signup.status,202);assert.equal(mail.length,1);
  assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'verifiedparent',password}))).status,403);
  const verifyToken=new URL(mail[0].link).hash.slice('#verify='.length);
@@ -168,13 +173,13 @@ test('email verification gates parent login, consumes token once and isolates ac
  assert.equal(login.status,200);assert.equal((await f.auth.fetch(req('/api/auth/session',undefined,cookieOf(login)))).status,200);
 });
 test('forgot password is non-enumerating, single-use, expiring and revokes all sessions',async()=>{
- const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
- assert.equal((await f.auth.fetch(req('/api/auth/register',{username:'parentsecure',email:'secure@example.test',password}))).status,202);
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);enableTurnstile(f);
+ assert.equal((await f.auth.fetch(req('/api/auth/register',{username:'parentsecure',email:'secure@example.test',password,turnstileToken:'valid-challenge'}))).status,202);
  const verifyToken=new URL(mail.pop().link).hash.slice('#verify='.length);
  assert.equal((await f.auth.fetch(req('/api/auth/verify-email',{token:verifyToken}))).status,200);
  const login=await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password})),cookie=cookieOf(login);
- const unknown=await f.auth.fetch(req('/api/auth/forgot-password',{email:'missing@example.test'}));
- const known=await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test'}));
+ const unknown=await f.auth.fetch(req('/api/auth/forgot-password',{email:'missing@example.test',turnstileToken:'valid-forgot'}));
+ const known=await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test',turnstileToken:'valid-forgot'}));
  assert.equal(unknown.status,200);assert.equal(known.status,200);assert.deepEqual(await unknown.json(),await known.json());
  assert.equal(mail.length,1);
  const resetToken=new URL(mail[0].link).hash.slice('#reset='.length);
@@ -185,7 +190,7 @@ test('forgot password is non-enumerating, single-use, expiring and revokes all s
  await f.ctx.storage.delete('rate:'+await digest('test-client'));
  assert.equal((await f.auth.fetch(req('/api/auth/login',{username:'parentsecure',password:'New long secure password 987!'}))).status,200);
  await f.ctx.storage.delete('rate:'+await digest('test-client'));
- await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test'}));
+ await f.auth.fetch(req('/api/auth/forgot-password',{email:'secure@example.test',turnstileToken:'valid-forgot'}));
  const expired=new URL(mail.at(-1).link).hash.slice('#reset='.length),key='reset:'+await digest(expired),record=await f.ctx.storage.get(key);
  record.expires=Date.now()-1;await f.ctx.storage.put(key,record);
  assert.equal((await f.auth.fetch(req('/api/auth/reset-password',{token:expired,password:'Another long secure password'}))).status,400);
@@ -196,4 +201,46 @@ test('automated registration honeypot rejects submissions without creating accou
  const response=await f.auth.fetch(req('/api/auth/register',{username:'botparent',email:'bot@example.test',password,website:'https://spam.example'}));
  assert.equal(response.status,400);
  assert.equal(await f.ctx.storage.get('user:botparent'),undefined);
+});
+
+test('Turnstile configuration exposes site key only',async()=>{
+ const f=await fixture();enableTurnstile(f);
+ const response=await worker.fetch(req('/api/auth/turnstile-config'),f.env);
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{siteKey:'test-site-key',enabled:true});
+ assert.equal(response.headers.get('Cache-Control'),'private, no-store, max-age=0');
+});
+test('registration and recovery fail closed when Turnstile is missing or misconfigured',async()=>{
+ const f=await fixture(),mail=[];f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';f.env.EMAIL_SEND=async item=>mail.push(item);
+ const signup={username:'guardedparent',email:'guarded@example.test',password};
+ assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,503);
+ assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:signup.email}))).status,503);
+ enableTurnstile(f);
+ assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,403);
+ assert.equal((await f.auth.fetch(req('/api/auth/register',{...signup,turnstileToken:'invalid'}))).status,403);
+ assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:signup.email}))).status,403);
+ assert.equal(await f.ctx.storage.get('user:guardedparent'),undefined);assert.equal(mail.length,0);
+});
+test('Turnstile validates hostname, action, freshness and handles network errors',async()=>{
+ const f=await fixture();enableTurnstile(f);f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';
+ let attempts=0;
+ const signup={username:'protectedparent',email:'protected@example.test',password,turnstileToken:'test-token'};
+ for(const result of [
+  {success:false},
+  {success:true,hostname:'attacker.test',action:'register',challenge_ts:new Date().toISOString()},
+  {success:true,hostname:'english.test',action:'forgot-password',challenge_ts:new Date().toISOString()},
+  {success:true,hostname:'english.test',action:'register',challenge_ts:new Date(Date.now()-6*60*1000).toISOString()}
+ ]){
+  f.env.TURNSTILE_VERIFY=async()=>{attempts++;return result};
+  assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,403);
+ }
+ f.env.TURNSTILE_VERIFY=async()=>{throw Error('network unavailable')};
+ assert.equal((await f.auth.fetch(req('/api/auth/register',signup))).status,503);
+ assert.equal(attempts,4);assert.equal(await f.ctx.storage.get('user:protectedparent'),undefined);
+});
+test('rate limiting runs before outbound Turnstile verification',async()=>{
+ const f=await fixture();enableTurnstile(f);f.env.EMAIL_API_KEY='test';f.env.EMAIL_FROM='test@example.test';
+ let calls=0;f.env.TURNSTILE_VERIFY=async()=>{calls++;return {success:false}};
+ for(let i=0;i<8;i++)assert.equal((await f.auth.fetch(req('/api/auth/forgot-password',{email:'unknown@example.test',turnstileToken:'fake'}))).status,403);
+ const blocked=await f.auth.fetch(req('/api/auth/forgot-password',{email:'unknown@example.test',turnstileToken:'fake'}));
+ assert.equal(blocked.status,429);assert.equal(blocked.headers.get('Retry-After'),'900');assert.equal(calls,8);
 });

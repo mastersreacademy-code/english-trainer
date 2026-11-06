@@ -22,6 +22,28 @@ async function sendAccountEmail(env,email,subject,link){
  const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+env.EMAIL_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:env.EMAIL_FROM,to:[email],subject,text:subject+'\n\nOpen this link to continue: '+link+'\n\nThis link expires in 30 minutes. If you did not request it, ignore this message.'})});
  if(!response.ok)throw Error('Email delivery failed');
 }
+
+const TURNSTILE_VERIFY_URL='https://challenges.cloudflare.com/turnstile/v0/siteverify';
+async function verifyTurnstile(env,request,body){
+ if(!env.TURNSTILE_SECRET_KEY||!env.TURNSTILE_SITE_KEY)return {error:'Security verification is not configured.',status:503};
+ const token=typeof body.turnstileToken==='string'?body.turnstileToken:'';
+ if(token.length<1||token.length>2048)return {error:'Complete the security check and try again.',status:403};
+ try{
+  const remoteip=request.headers.get('X-Auth-Client-IP')||'';
+  const data={secret:env.TURNSTILE_SECRET_KEY,response:token,...(remoteip&&remoteip!=='unknown'?{remoteip}:{})};
+  const result=typeof env.TURNSTILE_VERIFY==='function'?await env.TURNSTILE_VERIFY(data):await (async()=>{
+   const response=await fetch(TURNSTILE_VERIFY_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data).toString()});
+   if(!response.ok)throw Error('Verification service unavailable');
+   return response.json();
+  })();
+  if(result?.success!==true)return {error:'Security verification failed. Please try again.',status:403};
+  const hostname=new URL(request.url).hostname;
+  if(!result.hostname||result.hostname!==hostname)return {error:'Security verification failed. Please try again.',status:403};
+  if(result.action!==(new URL(request.url).pathname==='/api/auth/register'?'register':'forgot-password'))return {error:'Security verification failed. Please try again.',status:403};
+  if(!result.challenge_ts||!Number.isFinite(Date.parse(result.challenge_ts))||Math.abs(Date.now()-Date.parse(result.challenge_ts))>5*60*1000)return {error:'Security verification expired. Please try again.',status:403};
+  return null;
+ }catch{return {error:'Security verification is temporarily unavailable.',status:503}}
+}
 export class FamilyAuth {
 constructor(ctx,env){this.ctx=ctx;this.env=env;this.storage=ctx.storage}
 fetch(request){return this.ctx.blockConcurrencyWhile(()=>this.handle(request))}
@@ -35,6 +57,7 @@ async handle(request){
 const path=new URL(request.url).pathname,method=request.method;
 if(path==='/internal/verify'){const session=await this.session(request),account=await this.sessionAccount(session);return json({authenticated:!!account},account?200:401)}
 const account=await this.storage.get('account');
+if(path==='/api/auth/turnstile-config'&&method==='GET')return json({siteKey:this.env.TURNSTILE_SITE_KEY||null,enabled:!!(this.env.TURNSTILE_SITE_KEY&&this.env.TURNSTILE_SECRET_KEY)});
 if(path==='/api/auth/session'&&method==='GET'){const session=await this.session(request),owner=await this.sessionAccount(session);return session&&owner?json({authenticated:true,accountId:owner.id,username:owner.username,legacy:owner.legacy===true,csrf:session.csrf,expires:session.expires}):json({authenticated:false,needsSetup:!account},401)}
 if(path==='/api/workspace'&&method==='GET'){const session=await this.session(request),owner=await this.sessionAccount(session);if(!owner)return json({error:'Please sign in again.'},401);const workspace=await this.storage.get('workspace:'+owner.id);return json({accountId:owner.id,revision:workspace?.revision||0,state:workspace?.state||null})}
 if(path==='/api/learners'&&method==='GET'){
@@ -67,10 +90,14 @@ if(await this.storage.get('user:'+username))return json({error:'That username is
 const salt=randomToken(),hash=await passwordHash(body.password,salt);await this.storage.put('account',{username,salt,hash,iterations:ITERATIONS,created:Date.now()});return this.newSession({username,id:'legacy'});
 }
 if(path==='/api/auth/register'){
+if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
 if(body.website)return json({error:'Registration unavailable.'},400);
+if(this.env.EMAIL_API_KEY||this.env.TURNSTILE_SECRET_KEY||this.env.TURNSTILE_SITE_KEY){
+ const challenge=await verifyTurnstile(this.env,request,body);
+ if(challenge)return json({error:challenge.error},challenge.status);
+}
  if(this.env.EMAIL_API_KEY){
   if(!this.env.EMAIL_FROM)return json({error:'Email delivery is not configured.'},503);
-  if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
   const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
   const email=typeof body.email==='string'?body.email.trim().toLowerCase():'';
   if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password)||email.length>254||!EMAIL_PATTERN.test(email))return json({error:'Enter a valid email, username and password of at least 12 characters.'},400);
@@ -84,7 +111,6 @@ if(body.website)return json({error:'Registration unavailable.'},400);
   catch{await this.storage.delete('user:'+username);await this.storage.delete('email:'+await digest(email));await this.storage.delete(tokenKey);return json({error:'Unable to send verification email. Please try again.'},503)}
   await this.scheduleCleanup();return json({ok:true,verificationRequired:true},202);
  }
-if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again in 15 minutes.'},429,{'Retry-After':'900'});
 const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';
 if(!/^[a-z0-9._-]{3,40}$/.test(username)||!validPassword(body.password))return json({error:'Use a 3–40 character username and a password of 12–128 characters.'},400);
 if(account?.username===username||await this.storage.get('user:'+username))return json({error:'That username is unavailable. Choose another one.'},409);
@@ -111,6 +137,7 @@ if(path==='/api/auth/verify-email'||path==='/api/auth/reset-password'){
 }
 if(path==='/api/auth/forgot-password'){
  if(!await this.rateAllowed(request))return json({error:'Too many attempts. Try again later.'},429,{'Retry-After':'900'});
+ if(this.env.EMAIL_API_KEY||this.env.TURNSTILE_SECRET_KEY||this.env.TURNSTILE_SITE_KEY){const challenge=await verifyTurnstile(this.env,request,body);if(challenge)return json({error:challenge.error},challenge.status)}
  const email=typeof body.email==='string'?body.email.trim().toLowerCase():'';
  if(email.length>254||!EMAIL_PATTERN.test(email))return json(PUBLIC_AUTH_RESPONSE);
  const username=await this.storage.get('email:'+await digest(email)),user=username?await this.storage.get('user:'+username):null;

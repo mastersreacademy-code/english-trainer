@@ -4,6 +4,7 @@ test('parent email verification, reset request and password recovery UI',async({
  await page.route('**/api/auth/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,body=req.method()==='POST'?req.postDataJSON():{};
   const send=(value,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)});
+  if(path.endsWith('/turnstile-config'))return send({enabled:false,siteKey:null});
   if(path.endsWith('/session'))return send({authenticated:false},401);
   if(path.endsWith('/register')){if(body.email!==account.email)return send({error:'Invalid email'},400);account.password=body.password;inbox.push('verify');return send({ok:true,verificationRequired:true},202)}
   if(path.endsWith('/verify-email')){if(body.token!=='a'.repeat(64))return send({error:'Invalid link'},400);account.verified=true;return send({ok:true})}

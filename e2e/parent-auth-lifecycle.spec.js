@@ -7,6 +7,7 @@ function service(page){
  page.route('**/api/**',async route=>{
   const request=route.request(),url=new URL(request.url()),path=url.pathname,post=request.method()==='POST';
   const body=post?request.postDataJSON():{},active=db.active,account=active?accounts.get(active):null;
+  if(path==='/api/auth/turnstile-config')return send(route,{enabled:false,siteKey:null});
   if(path==='/api/auth/session')return send(route,account?{authenticated:true,accountId:account.id,username:active,csrf:account.csrf}:{authenticated:false},account?200:401);
   if(path==='/api/auth/register'){
    const username=body.username?.trim().toLowerCase();
