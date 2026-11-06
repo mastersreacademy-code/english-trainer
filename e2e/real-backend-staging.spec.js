@@ -34,5 +34,20 @@ test.describe('real Worker staging: parent and learner persistence',()=>{
   await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Tiếng Việt');
   await page.reload();
   await expect(page.locator('[data-open-learner]').locator('xpath=../..')).toContainText('Tiếng Việt');
+  await page.locator('[data-open-learner]').first().click();
+  await page.goto(origin+'/#primary');
+  await expect(page.locator('[data-primary-subject="math"]')).toBeVisible();
+  await expect(page.locator('[data-primary-subject="vietnamese"]')).toBeVisible();
+  for(const [subject,summary] of [['math','Toán: 1 lượt'],['vietnamese','Tiếng Việt: 1 lượt']]){
+   await page.locator('[data-primary-subject="'+subject+'"]').click();
+   const quiz=page.locator('#primary-quiz');
+   await expect(quiz.locator('fieldset').first()).toBeVisible();
+   const count=await quiz.locator('fieldset').count();
+   for(let i=0;i<count;i++)await quiz.locator('fieldset').nth(i).locator('input[type="radio"]').first().check();
+   await quiz.getByRole('button',{name:'Chấm bài và lưu kết quả'}).click();
+   await expect(page.locator('#primary-result')).toContainText('Đã lưu:');
+   await page.reload();
+   await expect(page.locator('body')).toContainText(summary);
+  }
  });
 });
