@@ -324,7 +324,7 @@ async function familyDashboard(){
        const calendar=document.createElement('div');calendar.className='review-week-chart';
        calendar.setAttribute('role','group');calendar.setAttribute('aria-label','Lịch ôn tập 7 ngày của '+learner.nickname);
        calendar.style.cssText='display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:8px 0 12px';
-       const labels={completed:'✓ Đủ',partial:'◐ Thiếu',missed:'— Bỏ',today:'• Hôm nay','not-assigned':'—'};
+       const labels={completed:'✓ Đủ',partial:'◐ Thiếu',missed:'— Chưa ghi',today:'• Hôm nay','not-assigned':'—'};
        week.days.forEach(day=>{
         const cell=document.createElement('div');cell.className='small';
         cell.style.cssText='text-align:center;border:1px solid var(--line,#e5e7eb);border-radius:8px;padding:6px 2px;min-width:0';
@@ -334,7 +334,7 @@ async function familyDashboard(){
        });
        primary.after(calendar);
        const missed=document.createElement('p');missed.className='small';
-       missed.textContent='7 ngày gần đây: '+week.missedDays+' ngày chưa ôn · '+week.partialDays+' ngày chưa đủ môn.';
+       missed.textContent='7 ngày gần đây: '+week.missedDays+' ngày chưa ghi nhận bài ôn · '+week.partialDays+' ngày chưa đủ môn.';
        calendar.after(missed);
       }
      }
