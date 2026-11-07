@@ -4,18 +4,18 @@ const password=process.env.STAGING_TEST_PASSWORD;
 test.beforeAll(()=>{
  if(!username?.startsWith('staging_')||!password)throw Error('Use a dedicated staging_ test parent with STAGING_TEST_USERNAME and STAGING_TEST_PASSWORD');
 });
-test('parent login and two child workspaces remain accessible after reload',async({page,request})=>{
+test('parent login and two child workspaces remain accessible after reload',async({page})=>{
  await page.goto('/login');
  await expect(page.locator('#auth-form')).toBeVisible();
  await page.locator('#username').fill(username);
  await page.locator('#password').fill(password);
  await page.locator('#auth-submit').click();
  await expect(page).not.toHaveURL(/\/login(?:$|[?#])/,{timeout:20000});
- const sessionResponse=await request.get('/api/auth/session');
+ const sessionResponse=await page.request.get('/api/auth/session');
  expect(sessionResponse.ok()).toBeTruthy();
  const session=await sessionResponse.json();
  expect(session.authenticated).toBe(true);
- const familyResponse=await request.get('/api/learners');
+ const familyResponse=await page.request.get('/api/learners');
  expect(familyResponse.ok()).toBeTruthy();
  const family=await familyResponse.json();
  expect(family.accountId).toBe(session.accountId);
@@ -24,7 +24,7 @@ test('parent login and two child workspaces remain accessible after reload',asyn
  expect(children[0].id).not.toBe(children[1].id);
  const original=new Map();
  for(const child of children){
-  const response=await request.get('/api/learner-workspace?learnerId='+encodeURIComponent(child.id));
+  const response=await page.request.get('/api/learner-workspace?learnerId='+encodeURIComponent(child.id));
   expect(response.ok()).toBeTruthy();
   const data=await response.json();
   expect(data.accountId).toBe(session.accountId);
@@ -34,7 +34,7 @@ test('parent login and two child workspaces remain accessible after reload',asyn
  await page.reload();
  await expect(page).not.toHaveURL(/\/login(?:$|[?#])/);
  for(const child of children){
-  const response=await request.get('/api/learner-workspace?learnerId='+encodeURIComponent(child.id));
+  const response=await page.request.get('/api/learner-workspace?learnerId='+encodeURIComponent(child.id));
   expect(response.ok()).toBeTruthy();
   const data=await response.json();
   expect(JSON.stringify(data.state?.primaryHistory||[])).toBe(original.get(child.id));
