@@ -7,7 +7,7 @@ assert.equal(cfg.name,'family-learning-staging');
 assert.equal(cfg.vars.EMAIL_TEST_MODE,'true');
 assert.equal(cfg.vars.EMAIL_TEST_RECIPIENT,'moonlittran@gmail.com');
 const base=new URL(process.env.FAMILY_STAGING_URL||'https://family-learning-staging.mastersreacademy.workers.dev/');
-if(base.protocol!=='https:'||base.pathname!=='/'||base.search||base.hash||!/^family-learning-staging(?:\\.[a-z0-9-]+)?\\.workers\\.dev$/.test(base.hostname))throw Error('Only dedicated staging Worker is permitted');
+if(base.protocol!=='https:'||base.pathname!=='/'||base.search||base.hash||base.hostname!=='family-learning-staging.mastersreacademy.workers.dev')throw Error('Only dedicated staging Worker is permitted');
 const username=process.env.STAGING_TEST_USERNAME;
 const password=process.env.STAGING_TEST_PASSWORD;
 if(!username||!password)throw Error('Set STAGING_TEST_USERNAME and STAGING_TEST_PASSWORD for a dedicated staging-only parent account');
