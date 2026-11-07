@@ -52,3 +52,22 @@ test('duplicate enabled subjects produce only one task per subject',()=>{
  const duplicate={...child,subjects:['math','math','vietnamese']};
  assert.equal(primaryDailyOverview(duplicate,[],'2026-11-07').total,2);
 });
+
+test('weekly calendar distinguishes missed, partial, complete and today',async()=>{
+ const {primaryWeeklyCalendar}=await import('../public/primary-daily-overview.js');
+ const first=primaryDailyOverview(child,[],'2026-11-04');
+ const second=primaryDailyOverview(child,[],'2026-11-05');
+ const result=(task)=>({learnerId:child.id,subject:task.subject,sessionId:task.sessionId,correct:3,total:4});
+ const calendar=primaryWeeklyCalendar(child,[result(first.tasks[0]),...second.tasks.map(result)],'2026-11-07');
+ assert.equal(calendar.days.find(d=>d.date==='2026-11-04').status,'partial');
+ assert.equal(calendar.days.find(d=>d.date==='2026-11-05').status,'completed');
+ assert.equal(calendar.days.find(d=>d.date==='2026-11-06').status,'missed');
+ assert.equal(calendar.days.at(-1).status,'today');
+ assert.equal(calendar.missedDays,4);
+});
+test('no assigned primary subjects are not considered missed',async()=>{
+ const {primaryWeeklyCalendar}=await import('../public/primary-daily-overview.js');
+ const calendar=primaryWeeklyCalendar({...child,subjects:['english']},[],'2026-11-07');
+ assert.equal(calendar.missedDays,0);
+ assert.ok(calendar.days.every(day=>day.status==='not-assigned'));
+});
