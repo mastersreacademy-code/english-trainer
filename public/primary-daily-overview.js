@@ -25,3 +25,14 @@ export function nextPrimaryDailySubject(overview) {
  if(!overview || !Array.isArray(overview.tasks)) throw new TypeError('Daily overview required');
  return overview.tasks.find(task=>task.status==='pending')?.subject ?? null;
 }
+
+export function primaryWeeklyCalendar(profile, results = [], endDay) {
+ const overview = primaryWeeklyOverview(profile, results, endDay);
+ const days = overview.days.map((day, index) => ({
+  date:day.day,
+  completed:day.completed,
+  assigned:day.total,
+  status:day.total===0?'not-assigned':day.completed===day.total?'completed':index===6?'today':day.completed>0?'partial':'missed'
+ }));
+ return {...overview,days,missedDays:days.filter(day=>day.status==='missed').length,partialDays:days.filter(day=>day.status==='partial').length};
+}
