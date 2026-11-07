@@ -18,6 +18,9 @@ test('parent completes Math and Vietnamese quizzes for two children; scores surv
  expect(children.length,'Two disposable primary children with both subjects required').toBe(2);
  for(const child of children){
   await page.goto('/#family');
+  const returnButton=page.locator('#return-to-parent');
+  if(await returnButton.isVisible())await returnButton.click();
+  await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();
   await expect(page.locator('[data-open-learner="'+child.id+'"]')).toBeVisible();
   await page.locator('[data-open-learner="'+child.id+'"]').click();
   await page.goto('/#primary');
@@ -39,7 +42,7 @@ test('parent completes Math and Vietnamese quizzes for two children; scores surv
   const response=await page.request.get('/api/learner-workspace?learnerId='+encodeURIComponent(child.id));
   expect(response.ok()).toBeTruthy();
   const data=await response.json();
-  const today=new Date().toISOString().slice(0,10);
+  const today=await page.evaluate(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')});
   for(const subject of ['math','vietnamese'])expect(data.state.primaryHistory.some(r=>r.subject===subject&&r.day===today)).toBeTruthy();
  }
 });
