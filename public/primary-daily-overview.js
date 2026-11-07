@@ -20,3 +20,8 @@ export function primaryWeeklyOverview(profile,results=[],endDay) {
  const days=Array.from({length:7},(_,i)=>{const date=new Date(end);date.setUTCDate(date.getUTCDate()-6+i);return primaryDailyOverview(profile,results,date.toISOString().slice(0,10));});
  return {learnerId:profile.id,days,completed:days.reduce((n,d)=>n+d.completed,0),assigned:days.reduce((n,d)=>n+d.total,0)};
 }
+
+export function nextPrimaryDailySubject(overview) {
+ if(!overview || !Array.isArray(overview.tasks)) throw new TypeError('Daily overview required');
+ return overview.tasks.find(task=>task.status==='pending')?.subject ?? null;
+}
