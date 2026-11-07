@@ -1,0 +1,16 @@
+name: Staging live smoke (manual)
+on:
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify isolated staging without modifying data
+        run: node scripts/check-staging-live.mjs
