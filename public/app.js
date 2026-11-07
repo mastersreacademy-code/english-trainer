@@ -17,7 +17,7 @@ import {familyKey,isChild} from './family.js';
 import {addLearner,chooseLearner,editLearner} from './learner-profiles.js';
 import {subjects} from './subjects.js';
 import {createPrimarySession,gradePrimarySession,summarizePrimaryResults} from './primary-practice.js';
-import {primaryDailyOverview,primaryWeeklyOverview,nextPrimaryDailySubject} from './primary-daily-overview.js';
+import {primaryDailyOverview,primaryWeeklyOverview,primaryWeeklyCalendar,nextPrimaryDailySubject} from './primary-daily-overview.js';
 import {initAppearance} from './appearance.js';
 import {goalDetails,icon,scene} from './visuals.js';
 import {topics,vocabularyFor,dateKey,lesson,listening,planCount,nextLesson,lessonPrompts} from './learning.js';
@@ -316,10 +316,27 @@ async function familyDashboard(){
      const scoped=primaryHistory.map(item=>({...item,learnerId:learner.id,sessionId:item.id}));
      if(learner.grade<=5){
       const today=primaryDailyOverview(learner,scoped,dateKey());
-      const week=primaryWeeklyOverview(learner,scoped,dateKey());
+      const week=primaryWeeklyCalendar(learner,scoped,dateKey());
       const primary=document.createElement('p');primary.className='small';
       primary.textContent='Toán/Tiếng Việt hôm nay: '+today.completed+'/'+today.total+' môn · 7 ngày: '+week.completed+'/'+week.assigned+' bài';
       slot.before(primary);
+      if(week.assigned>0){
+       const calendar=document.createElement('div');calendar.className='review-week-chart';
+       calendar.setAttribute('role','group');calendar.setAttribute('aria-label','Lịch ôn tập 7 ngày của '+learner.nickname);
+       calendar.style.cssText='display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:8px 0 12px';
+       const labels={completed:'✓ Đủ',partial:'◐ Thiếu',missed:'— Bỏ',today:'• Hôm nay','not-assigned':'—'};
+       week.days.forEach(day=>{
+        const cell=document.createElement('div');cell.className='small';
+        cell.style.cssText='text-align:center;border:1px solid var(--line,#e5e7eb);border-radius:8px;padding:6px 2px;min-width:0';
+        cell.textContent=day.date.slice(8)+' · '+labels[day.status];
+        cell.title=day.date+': '+day.completed+'/'+day.assigned+' môn · '+day.status;
+        calendar.append(cell);
+       });
+       primary.after(calendar);
+       const missed=document.createElement('p');missed.className='small';
+       missed.textContent='7 ngày gần đây: '+week.missedDays+' ngày chưa ôn · '+week.partialDays+' ngày chưa đủ môn.';
+       calendar.after(missed);
+      }
      }
      if(!summary.latest)slot.textContent='Today’s Review: no saved scores yet';
      else slot.textContent='Latest review: '+summary.latest.correct+'/'+summary.latest.total+' ('+summary.latest.date+') · Last 7 days: '+summary.lastSeven+' review(s)';
