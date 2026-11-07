@@ -17,6 +17,7 @@ import {familyKey,isChild} from './family.js';
 import {addLearner,chooseLearner,editLearner} from './learner-profiles.js';
 import {subjects} from './subjects.js';
 import {createPrimarySession,gradePrimarySession,summarizePrimaryResults} from './primary-practice.js';
+import {primaryDailyOverview,primaryWeeklyOverview} from './primary-daily-overview.js';
 import {initAppearance} from './appearance.js';
 import {goalDetails,icon,scene} from './visuals.js';
 import {topics,vocabularyFor,dateKey,lesson,listening,planCount,nextLesson,lessonPrompts} from './learning.js';
@@ -383,7 +384,11 @@ function primaryLearning(){
  const grade=currentLearner.grade,learnerId=currentLearner.id;
  const history=state.primaryHistory||[];
  const summary=summarizePrimaryResults(history.map(r=>({...r,learnerId})),learnerId);
- app.innerHTML=header()+'<section class="card"><span class="eyebrow">FAMILY LEARNING · PRIMARY</span><h1>Ôn tập cùng '+esc(currentLearner.nickname)+'</h1><p>Lớp '+grade+' · Chọn môn học và trả lời câu hỏi. Đây là bộ bài mẫu, chưa phải chương trình đầy đủ cả năm.</p><div class="actions">'+(currentLearner.subjects.includes('math')?'<button class="secondary" data-primary-subject="math">Toán</button>':'')+(currentLearner.subjects.includes('vietnamese')?'<button class="secondary" data-primary-subject="vietnamese">Tiếng Việt</button>':'')+(currentLearner.subjects.includes('english')?'<a class="button secondary" href="#today">Tiếng Anh</a>':'')+'</div><p class="small">Toán: '+summary.math.sessions+' lượt · Tiếng Việt: '+summary.vietnamese.sessions+' lượt</p><div id="primary-questions" aria-live="polite"></div></section>';
+ const scopedResults=history.map(r=>({...r,learnerId,sessionId:r.id}));
+ const daily=primaryDailyOverview(currentLearner,scopedResults,dateKey());
+ const weekly=primaryWeeklyOverview(currentLearner,scopedResults,dateKey());
+ const dailyPanel='<section class="card" aria-label="Tiến độ ôn tập"><h2>Bài ôn hôm nay</h2><p>'+daily.completed+'/'+daily.total+' môn đã hoàn thành · 7 ngày qua: '+weekly.completed+'/'+weekly.assigned+' bài</p><div class="actions">'+daily.tasks.map(task=>'<span class="pill">'+(task.subject==='math'?'Toán':'Tiếng Việt')+': '+(task.status==='completed'?'Đã làm · '+task.score+'%':'Chưa làm')+'</span>').join('')+'</div><p class="small">Kết quả chỉ tính bài đã lưu thành công của hồ sơ này. Có thể làm lại để luyện tập.</p></section>';
+ app.innerHTML=header()+'<section class="card"><span class="eyebrow">FAMILY LEARNING · PRIMARY</span><h1>Ôn tập cùng '+esc(currentLearner.nickname)+'</h1><p>Lớp '+grade+' · Chọn môn học và trả lời câu hỏi. Đây là bộ bài mẫu, chưa phải chương trình đầy đủ cả năm.</p><div class="actions">'+(currentLearner.subjects.includes('math')?'<button class="secondary" data-primary-subject="math">Toán</button>':'')+(currentLearner.subjects.includes('vietnamese')?'<button class="secondary" data-primary-subject="vietnamese">Tiếng Việt</button>':'')+(currentLearner.subjects.includes('english')?'<a class="button secondary" href="#today">Tiếng Anh</a>':'')+'</div><p class="small">Toán: '+summary.math.sessions+' lượt · Tiếng Việt: '+summary.vietnamese.sessions+' lượt</p><div id="primary-questions" aria-live="polite"></div></section>'+dailyPanel;
  const area=$('#primary-questions');
  app.querySelectorAll('[data-primary-subject]').forEach(button=>button.onclick=()=>{
   const subject=button.dataset.primarySubject;
