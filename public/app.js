@@ -312,6 +312,15 @@ async function familyDashboard(){
     learnerWorkspaceApi(learner.id).get().then(record=>{
      if(!slot.isConnected)return;
      const summary=learnerReviewSummary(record,familyAccount.accountId,learner.id);
+     const primaryHistory=Array.isArray(record.state?.primaryHistory)?record.state.primaryHistory:[];
+     const scoped=primaryHistory.map(item=>({...item,learnerId:learner.id,sessionId:item.id}));
+     if(learner.grade<=5){
+      const today=primaryDailyOverview(learner,scoped,dateKey());
+      const week=primaryWeeklyOverview(learner,scoped,dateKey());
+      const primary=document.createElement('p');primary.className='small';
+      primary.textContent='Toán/Tiếng Việt hôm nay: '+today.completed+'/'+today.total+' môn · 7 ngày: '+week.completed+'/'+week.assigned+' bài';
+      slot.before(primary);
+     }
      if(!summary.latest)slot.textContent='Today’s Review: no saved scores yet';
      else slot.textContent='Latest review: '+summary.latest.correct+'/'+summary.latest.total+' ('+summary.latest.date+') · Last 7 days: '+summary.lastSeven+' review(s)';
      const chart=document.createElement('div');chart.className='review-week-chart';chart.setAttribute('role','group');chart.setAttribute('aria-label','Daily review progress for '+learner.nickname);
