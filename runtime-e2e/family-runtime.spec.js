@@ -4,7 +4,8 @@ import {randomUUID} from 'node:crypto';
 test('real local Worker: parent, two learners, Math/Vietnamese UI saves after reload',async({page})=>{
  const username='ci_'+randomUUID().replaceAll('-','').slice(0,20);
  const password='CI-local-only-Strong-Passphrase-2026!';
- const register=await page.request.post('/api/auth/register',{data:{username,password}});
+ const origin='http://127.0.0.1:4178';
+ const register=await page.request.post('/api/auth/register',{headers:{Origin:origin},data:{username,password}});
  expect(register.ok(),await register.text()).toBeTruthy();
  const sessionResponse=await page.request.get('/api/auth/session');
  expect(sessionResponse.ok()).toBeTruthy();
@@ -13,7 +14,7 @@ test('real local Worker: parent, two learners, Math/Vietnamese UI saves after re
   {id:'ci_child_a_'+randomUUID().replaceAll('-','').slice(0,12),nickname:'Child A',grade:1,subjects:['math','vietnamese']},
   {id:'ci_child_b_'+randomUUID().replaceAll('-','').slice(0,12),nickname:'Child B',grade:2,subjects:['math','vietnamese']}
  ];
- const saveProfiles=await page.request.post('/api/learners',{headers:{'X-CSRF-Token':session.csrf},data:{accountId:session.accountId,revision:0,profiles:{version:1,learners:children,activeId:children[0].id}}});
+ const saveProfiles=await page.request.post('/api/learners',{headers:{Origin:origin,'X-CSRF-Token':session.csrf},data:{accountId:session.accountId,revision:0,profiles:{version:1,learners:children,activeId:children[0].id}}});
  expect(saveProfiles.ok(),await saveProfiles.text()).toBeTruthy();
  await page.goto('/#family');
  await expect(page.getByRole('heading',{name:'Family profiles'})).toBeVisible();
